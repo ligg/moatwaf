@@ -1,0 +1,16 @@
+logs/
+*.pid
+*.secret
+.env
+.DS_Store
+.mcp.json
+.playwright-mcp/
+.superpowers/
+docs/
+.remember/
+.codegraph/
+.claude/CLAUDE.md
+docs/operations-runbook.md
+docs/waf-competitive-analysis.md
+docs/superpowers/
+CLAUDE.md

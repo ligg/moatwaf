@@ -1,0 +1,29 @@
+# Custom Rules
+# Add your own WAF rules here. Rules in this file are checked last
+# (lowest priority). Copy the format below for each new rule.
+#
+# Fields:
+#   id          - Unique rule identifier (e.g., CUSTOM-001)
+#   description - Human-readable description of what the rule catches
+#   severity    - critical, high, medium, or low
+#   target      - Request attribute to match: URI, ARGS, BODY, HEADERS, or COOKIE
+#   pattern     - PCRE regex pattern
+#   action      - BLOCK (reject request) or LOG (allow but log)
+#
+# Example:
+# ---
+# id: CUSTOM-001
+# description: "Block requests to internal admin endpoint from external IPs"
+# severity: high
+# target: URI
+# pattern: "^/admin/internal/"
+# action: BLOCK
+# ---
+# id: CUSTOM-002
+# description: "Block specific suspicious query parameter"
+# severity: medium
+# target: ARGS
+# pattern: "(?i)debug=true"
+# action: LOG
+
+rules:

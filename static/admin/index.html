@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Moat WAF - Admin</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="login-page" class="login-page">
+        <div class="login-card">
+            <div class="login-header">
+                <h1>Moat</h1>
+                <p>Web Application Firewall</p>
+            </div>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="token-input">Admin Token</label>
+                    <input type="password" id="token-input" placeholder="Enter your admin token" autocomplete="off" required>
+                </div>
+                <div id="login-error" class="login-error" hidden></div>
+                <button type="submit" class="btn btn-primary btn-block">Authenticate</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="app" class="app-layout" hidden>
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>Moat</h2>
+                <span class="version" id="version-badge"></span>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" data-page="dashboard">
+                    <span class="nav-icon">&#9632;</span>
+                    Dashboard
+                </a>
+                <a href="#" class="nav-item" data-page="rules">
+                    <span class="nav-icon">&#9881;</span>
+                    Rules
+                </a>
+                <a href="#" class="nav-item" data-page="blacklist">
+                    <span class="nav-icon">&#9940;</span>
+                    IP Blacklist
+                </a>
+                <a href="#" class="nav-item" data-page="whitelist">
+                    <span class="nav-icon">&#9989;</span>
+                    IP Whitelist
+                </a>
+                <a href="#" class="nav-item" data-page="cc-config">
+                    <span class="nav-icon">&#128274;</span>
+                    CC Protection
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <button id="logout-btn" class="btn btn-ghost btn-block">Logout</button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div id="page-dashboard" class="page active">
+                <div class="page-header">
+                    <h1>Dashboard</h1>
+                    <span class="refresh-indicator" id="refresh-indicator">Auto-refresh: 5s</span>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Requests</div>
+                        <div class="stat-value" id="stat-total">--</div>
+                    </div>
+                    <div class="stat-card stat-passed">
+                        <div class="stat-label">Passed</div>
+                        <div class="stat-value" id="stat-passed">--</div>
+                    </div>
+                    <div class="stat-card stat-blocked">
+                        <div class="stat-label">Blocked</div>
+                        <div class="stat-value" id="stat-blocked">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Last Request</div>
+                        <div class="stat-value stat-time" id="stat-last-time">--</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Attack Distribution</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="bar-chart" id="attack-bars"></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2>System Status</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="status-grid" id="system-status"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="page-rules" class="page">
+                <div class="page-header">
+                    <h1>WAF Rules</h1>
+                    <button class="btn btn-primary" id="reload-rules-btn">Reload Rules</button>
+                </div>
+                <div class="card">
+                    <div class="card-body">
+                        <p class="text-muted">Click "Reload Rules" to reload the WAF rule set from disk. This applies rule changes without restarting nginx.</p>
+                        <div id="reload-status" class="reload-status" hidden></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="page-blacklist" class="page">
+                <div class="page-header">
+                    <h1>IP Blacklist</h1>
+                </div>
+                <div class="card">
+                    <div class="card-body">
+                        <form id="blacklist-add-form" class="ip-form">
+                            <input type="text" id="blacklist-ip-input" placeholder="IPv4 address (e.g. 192.168.1.100)" required>
+                            <input type="number" id="blacklist-ttl-input" placeholder="TTL (seconds, default 300)" min="1">
+                            <button type="submit" class="btn btn-danger">Block IP</button>
+                        </form>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Blocked IPs</h2>
+                        <button class="btn btn-ghost btn-sm" id="refresh-blacklist-btn">Refresh</button>
+                    </div>
+                    <div class="card-body">
+                        <table class="table" id="blacklist-table">
+                            <thead>
+                                <tr>
+                                    <th>IP Address</th>
+                                    <th>Value</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="blacklist-tbody"></tbody>
+                        </table>
+                        <p class="text-muted empty-msg" id="blacklist-empty">No IPs in blacklist.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="page-whitelist" class="page">
+                <div class="page-header">
+                    <h1>IP Whitelist</h1>
+                </div>
+                <div class="card">
+                    <div class="card-body">
+                        <form id="whitelist-add-form" class="ip-form">
+                            <input type="text" id="whitelist-ip-input" placeholder="IPv4 address (e.g. 10.0.0.1)" required>
+                            <button type="submit" class="btn btn-primary">Whitelist IP</button>
+                        </form>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Whitelisted IPs</h2>
+                        <button class="btn btn-ghost btn-sm" id="refresh-whitelist-btn">Refresh</button>
+                    </div>
+                    <div class="card-body">
+                        <table class="table" id="whitelist-table">
+                            <thead>
+                                <tr>
+                                    <th>IP Address</th>
+                                    <th>Value</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="whitelist-tbody"></tbody>
+                        </table>
+                        <p class="text-muted empty-msg" id="whitelist-empty">No IPs in whitelist.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="page-cc-config" class="page">
+                <div class="page-header">
+                    <h1>CC Protection Config</h1>
+                </div>
+                <div class="card">
+                    <div class="card-body">
+                        <form id="cc-config-form">
+                            <div class="config-grid">
+                                <div class="config-field">
+                                    <label for="cc-ip-qps">IP QPS Limit</label>
+                                    <input type="number" id="cc-ip-qps" min="1" placeholder="Max requests per second per IP">
+                                </div>
+                                <div class="config-field">
+                                    <label for="cc-ip-conn">IP Connection Limit</label>
+                                    <input type="number" id="cc-ip-conn" min="1" placeholder="Max concurrent connections per IP">
+                                </div>
+                                <div class="config-field">
+                                    <label for="cc-global-qps">Global QPS Limit</label>
+                                    <input type="number" id="cc-global-qps" min="1" placeholder="Max total requests per second">
+                                </div>
+                                <div class="config-field">
+                                    <label for="cc-window">Window Size (seconds)</label>
+                                    <input type="number" id="cc-window" min="1" placeholder="Rate limit window duration">
+                                </div>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-primary">Save Configuration</button>
+                            </div>
+                        </form>
+                        <div id="cc-config-status" class="reload-status" hidden></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/dashboard.js"></script>
+    <script src="js/rules.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

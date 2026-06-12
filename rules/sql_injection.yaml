@@ -1,0 +1,108 @@
+# SQL Injection Detection Rules
+# Matches common SQL injection patterns in URI, ARGS, BODY, and HEADERS
+
+---
+id: SQLI_001
+description: "SQL Injection - UNION SELECT"
+target: URI
+pattern: "(?i)(union\\s+(all\\s+)?select)"
+action: block
+severity: critical
+---
+id: SQLI_002
+description: "SQL Injection - UNION SELECT in query string"
+target: ARGS
+pattern: "(?i)(union\\s+(all\\s+)?select)"
+action: block
+severity: critical
+---
+id: SQLI_003
+description: "SQL Injection - OR/AND boolean bypass"
+target: ARGS
+pattern: "(?i)(\\bor\\b|\\band\\b)\\s+['\"]?\\d+"
+action: block
+severity: high
+---
+id: SQLI_004
+description: "SQL Injection - OR/AND boolean in URI"
+target: URI
+pattern: "(?i)(\\bor\\b|\\band\\b)\\s+['\"]?\\d+"
+action: block
+severity: high
+---
+id: SQLI_005
+description: "SQL Injection - Stacked queries (semicolon)"
+target: ARGS
+pattern: "(?i);\\s*(select|insert|update|delete|drop|alter|create|exec)"
+action: block
+severity: critical
+---
+id: SQLI_006
+description: "SQL Injection - Stacked queries in URI"
+target: URI
+pattern: "(?i);\\s*(select|insert|update|delete|drop|alter|create|exec)"
+action: block
+severity: critical
+---
+id: SQLI_007
+description: "SQL Injection - Comment sequences"
+target: ARGS
+pattern: "(?i)(--|/\\*|\\*/)"
+action: block
+severity: high
+---
+id: SQLI_008
+description: "SQL Injection - Comment sequences in URI"
+target: URI
+pattern: "(?i)(--|/\\*|\\*/)"
+action: block
+severity: high
+---
+id: SQLI_009
+description: "SQL Injection - Sleep/benchmark timing"
+target: ARGS
+pattern: "(?i)(sleep|benchmark|waitfor\\s+delay)\\s*\\("
+action: block
+severity: critical
+---
+id: SQLI_010
+description: "SQL Injection - Information schema access"
+target: ARGS
+pattern: "(?i)(information_schema|sysobjects|syscolumns|msysobjects)"
+action: block
+severity: critical
+---
+id: SQLI_011
+description: "SQL Injection - Hex/char encoding"
+target: ARGS
+pattern: "(?i)(0x[0-9a-f]+|char\\s*\\(|chr\\s*\\()"
+action: block
+severity: high
+---
+id: SQLI_012
+description: "SQL Injection - Load file / into outfile"
+target: ARGS
+pattern: "(?i)(load_file|into\\s+(out|dump)file)"
+action: block
+severity: critical
+---
+id: SQLI_013
+description: "SQL Injection - Common SQL keywords in body"
+target: BODY
+pattern: "(?i)(select\\s+.*\\s+from|insert\\s+into|delete\\s+from|update\\s+.*\\s+set)"
+action: block
+severity: high
+---
+id: SQLI_014
+description: "SQL Injection - DROP TABLE"
+target: ARGS
+pattern: "(?i)(drop\\s+(table|database|column))"
+action: block
+severity: critical
+---
+id: SQLI_015
+description: "SQL Injection - xp_cmdshell"
+target: ARGS
+pattern: "(?i)(xp_cmdshell|sp_executesql|openrowset)"
+action: block
+severity: critical

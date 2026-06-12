@@ -1,0 +1,163 @@
+# Sensitive File Access Detection Rules
+# Covers: environment files, version control, config files,
+#         backup files, debug endpoints, framework files
+
+---
+id: SENS-001
+description: ".env file access"
+severity: high
+target: URI
+pattern: "(?i)\\.env($|\\.(local|production|development|staging|bak|old|backup))"
+action: BLOCK
+
+---
+id: SENS-002
+description: ".git directory access"
+severity: high
+target: URI
+pattern: "(?i)/\\.git($|/|\\.(git|HEAD|config|index))"
+action: BLOCK
+
+---
+id: SENS-003
+description: ".svn directory access"
+severity: high
+target: URI
+pattern: "(?i)/\\.svn($|/|\\.)"
+action: BLOCK
+
+---
+id: SENS-004
+description: ".htaccess file access"
+severity: high
+target: URI
+pattern: "(?i)/\\.htaccess($|\\.)"
+action: BLOCK
+
+---
+id: SENS-005
+description: ".htpasswd file access"
+severity: high
+target: URI
+pattern: "(?i)/\\.htpasswd($|\\.)"
+action: BLOCK
+
+---
+id: SENS-006
+description: "wp-config.php access"
+severity: critical
+target: URI
+pattern: "(?i)wp-config\\.php"
+action: BLOCK
+
+---
+id: SENS-007
+description: "web.config access"
+severity: high
+target: URI
+pattern: "(?i)web\\.config($|\\.)"
+action: BLOCK
+
+---
+id: SENS-008
+description: "config.php access"
+severity: high
+target: URI
+pattern: "(?i)(config|configuration|settings|conf)\\.php($|\\.)"
+action: BLOCK
+
+---
+id: SENS-009
+description: "database.yml access"
+severity: high
+target: URI
+pattern: "(?i)database\\.yml($|\\.)"
+action: BLOCK
+
+---
+id: SENS-010
+description: "settings.py access"
+severity: high
+target: URI
+pattern: "(?i)settings\\.py($|\\.)"
+action: BLOCK
+
+---
+id: SENS-011
+description: ".DS_Store access"
+severity: low
+target: URI
+pattern: "\\.DS_Store$"
+action: BLOCK
+
+---
+id: SENS-012
+description: "Backup files: .bak, .old, .orig"
+severity: medium
+target: URI
+pattern: "\\.(bak|old|orig|save|swp|tmp)(\\.|$)"
+action: BLOCK
+
+---
+id: SENS-013
+description: "phpinfo() access"
+severity: high
+target: URI
+pattern: "(?i)(phpinfo|php_info)\\.php"
+action: BLOCK
+
+---
+id: SENS-014
+description: "phpinfo in args"
+severity: high
+target: ARGS
+pattern: "(?i)phpinfo\\s*\\("
+action: BLOCK
+
+---
+id: SENS-015
+description: ".idea / .vscode IDE config access"
+severity: low
+target: URI
+pattern: "(?i)/\\.(idea|vscode|editorconfig)($|/)"
+action: BLOCK
+
+---
+id: SENS-016
+description: "Composer/NPM/Pip lock and config files"
+severity: medium
+target: URI
+pattern: "(?i)/(composer\\.(json|lock)|package\\.json|package-lock\\.json|yarn\\.lock|Pipfile(\\.lock)?|requirements\\.txt|Gemfile(\\.lock)?)$"
+action: BLOCK
+
+---
+id: SENS-017
+description: "Dockerfile / docker-compose access"
+severity: medium
+target: URI
+pattern: "(?i)/(Dockerfile|docker-compose\\.(yml|yaml))($|\\.)"
+action: BLOCK
+
+---
+id: SENS-018
+description: ".aws / .ssh credentials directory"
+severity: critical
+target: URI
+pattern: "(?i)/\\.(aws|ssh|gnupg|docker)($|/)"
+action: BLOCK
+
+---
+id: SENS-019
+description: "Server info / status endpoints"
+severity: medium
+target: URI
+pattern: "(?i)/(server-status|server-info|nginx_status|fpm_status|apc\\.php|opcache\\.php)$"
+action: BLOCK
+
+---
+id: SENS-020
+description: "Sensitive file access via query parameter"
+severity: high
+target: ARGS
+pattern: "(?i)(file|path|page|include|document|folder|root|pg)\\s*=\\s*.*(\\.\\.|/etc/|/proc/|/var/|\\.env|\\.git|\\.svn)"
+action: BLOCK

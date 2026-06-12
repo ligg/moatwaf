@@ -1,0 +1,4 @@
+# conf/geo_block.txt
+# Countries to block (ISO 3166-1 alpha-2)
+# Example:
+# XX  (placeholder for restricted regions)

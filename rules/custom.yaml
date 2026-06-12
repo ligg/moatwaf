@@ -1,0 +1,79 @@
+# Custom Rules Template
+# Add organization-specific rules below. Each rule follows the standard format:
+#   id:          Unique rule ID (CUSTOM_XXX recommended)
+#   description: Human-readable description
+#   target:      Request attribute to match (URI, ARGS, BODY, HEADERS, COOKIE)
+#   pattern:     PCRE regex pattern
+#   action:      "block", "log", or "pass"
+#   severity:    "critical", "high", "medium", "low"
+
+---
+id: CUSTOM_001
+description: "Block requests to /api/internal/ endpoints"
+target: URI
+pattern: "(?i)^/api/internal/"
+action: block
+severity: high
+---
+id: CUSTOM_002
+description: "Block admin access from non-whitelisted paths"
+target: URI
+pattern: "(?i)^/admin/(?!login|health)"
+action: block
+severity: high
+---
+id: CUSTOM_003
+description: "Log requests with extremely long query strings (potential fuzzing)"
+target: ARGS
+pattern: ".{2000,}"
+action: log
+severity: medium
+---
+id: CUSTOM_004
+description: "Block GraphQL introspection queries"
+target: ARGS
+pattern: "(?i)\\{\\s*__schema\\s*\\{"
+action: block
+severity: medium
+---
+id: CUSTOM_005
+description: "Block common REST API probing methods"
+target: URI
+pattern: "(?i)^/(cgi-bin|phpmyadmin|adminer|admin\\.php)"
+action: block
+severity: high
+---
+id: CUSTOM_006
+description: "Block JSON array in query string (potential injection)"
+target: ARGS
+pattern: "\\[\\s*[\"']"
+action: block
+severity: medium
+---
+id: CUSTOM_007
+description: "Block SQL injection via User-Agent"
+target: HEADERS
+pattern: "(?i)(union\\s+select|or\\s+1\\s*=\\s*1|drop\\s+table)"
+action: block
+severity: high
+---
+id: CUSTOM_008
+description: "Block requests with null bytes in URI"
+target: URI
+pattern: "(%00|\\\\x00)"
+action: block
+severity: critical
+---
+id: CUSTOM_009
+description: "Block Server-Side Template Injection (SSTI)"
+target: ARGS
+pattern: "(\\{\\{.*\\}\\}|\\$\\{.*\\}|<%=.*%>)"
+action: block
+severity: high
+---
+id: CUSTOM_010
+description: "Block LDAP injection patterns"
+target: ARGS
+pattern: "(?i)(\\)(\\|\\||\\&\\&)|\\(\\|\\|)"
+action: block
+severity: high

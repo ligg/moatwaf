@@ -1,0 +1,7 @@
+# conf/ip_whitelist.txt
+# Trusted IPs that bypass all checks
+# Format: IP or CIDR
+# Example:
+# 10.0.0.1
+# 192.168.1.0/24
+127.0.0.1

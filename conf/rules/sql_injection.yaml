@@ -1,0 +1,363 @@
+# SQL Injection Detection Rules
+# Covers: UNION-based, boolean-blind, time-blind, error-based, stacked queries,
+#         hex/comment evasion, and common payload patterns
+
+---
+id: SQLI-001
+description: "UNION SELECT injection"
+severity: critical
+target: ARGS
+pattern: "(?i)union\\s+(all\\s+)?select"
+action: BLOCK
+
+---
+id: SQLI-002
+description: "UNION SELECT in URI"
+severity: critical
+target: URI
+pattern: "(?i)union\\s+(all\\s+)?select"
+action: BLOCK
+
+---
+id: SQLI-003
+description: "UNION SELECT in request body"
+severity: critical
+target: BODY
+pattern: "(?i)union\\s+(all\\s+)?select"
+action: BLOCK
+
+---
+id: SQLI-004
+description: "Boolean-based blind: OR/AND with numeric comparison"
+severity: critical
+target: ARGS
+pattern: "(?i)\\b(or|and)\\b\\s+\\d+\\s*=\\s*\\d+"
+action: BLOCK
+
+---
+id: SQLI-005
+description: "Boolean-based blind: OR/AND with string comparison"
+severity: critical
+target: ARGS
+pattern: "(?i)\\b(or|and)\\b\\s+['\"]\\w+['\"]\\s*=\\s*['\"]\\w+['\"]"
+action: BLOCK
+
+---
+id: SQLI-006
+description: "Boolean-based blind in body: OR/AND tautology"
+severity: critical
+target: BODY
+pattern: "(?i)\\b(or|and)\\b\\s+\\d+\\s*=\\s*\\d+"
+action: BLOCK
+
+---
+id: SQLI-007
+description: "DROP TABLE / DROP DATABASE"
+severity: critical
+target: ARGS
+pattern: "(?i)drop\\s+(table|database|schema)"
+action: BLOCK
+
+---
+id: SQLI-008
+description: "DROP TABLE in body"
+severity: critical
+target: BODY
+pattern: "(?i)drop\\s+(table|database|schema)"
+action: BLOCK
+
+---
+id: SQLI-009
+description: "INSERT INTO injection"
+severity: high
+target: ARGS
+pattern: "(?i)insert\\s+into\\s+\\w+\\s+values"
+action: BLOCK
+
+---
+id: SQLI-010
+description: "INSERT INTO in body"
+severity: high
+target: BODY
+pattern: "(?i)insert\\s+into\\s+\\w+\\s+values"
+action: BLOCK
+
+---
+id: SQLI-011
+description: "EXEC / EXECUTE procedure"
+severity: critical
+target: ARGS
+pattern: "(?i)\\bexec(ute)?\\s+\\w+"
+action: BLOCK
+
+---
+id: SQLI-012
+description: "EXEC / EXECUTE in body"
+severity: critical
+target: BODY
+pattern: "(?i)\\bexec(ute)?\\s+\\w+"
+action: BLOCK
+
+---
+id: SQLI-013
+description: "xp_cmdshell (MSSQL command execution)"
+severity: critical
+target: ARGS
+pattern: "(?i)xp_cmdshell"
+action: BLOCK
+
+---
+id: SQLI-014
+description: "xp_cmdshell in body"
+severity: critical
+target: BODY
+pattern: "(?i)xp_cmdshell"
+action: BLOCK
+
+---
+id: SQLI-015
+description: "Time-based blind: SLEEP()"
+severity: critical
+target: ARGS
+pattern: "(?i)sleep\\s*\\(\\s*\\d+"
+action: BLOCK
+
+---
+id: SQLI-016
+description: "Time-based blind: BENCHMARK()"
+severity: critical
+target: ARGS
+pattern: "(?i)benchmark\\s*\\(\\s*\\d+"
+action: BLOCK
+
+---
+id: SQLI-017
+description: "Time-based blind: WAITFOR DELAY"
+severity: critical
+target: ARGS
+pattern: "(?i)waitfor\\s+delay"
+action: BLOCK
+
+---
+id: SQLI-018
+description: "Time-based blind in body: SLEEP/BENCHMARK/WAITFOR"
+severity: critical
+target: BODY
+pattern: "(?i)(sleep|benchmark)\\s*\\(|waitfor\\s+delay"
+action: BLOCK
+
+---
+id: SQLI-019
+description: "HAVING clause injection"
+severity: high
+target: ARGS
+pattern: "(?i)\\bhaving\\s+\\d+\\s*=\\s*\\d+"
+action: BLOCK
+
+---
+id: SQLI-020
+description: "GROUP BY with HAVING injection"
+severity: high
+target: ARGS
+pattern: "(?i)group\\s+by\\s+.+\\bhaving\\b"
+action: BLOCK
+
+---
+id: SQLI-021
+description: "Hex-encoded SQL keyword (0x prefix)"
+severity: high
+target: ARGS
+pattern: "(?i)0x(select|insert|update|delete|union|drop|exec|from|where)"
+action: BLOCK
+
+---
+id: SQLI-022
+description: "Hex-encoded SQL in body"
+severity: high
+target: BODY
+pattern: "(?i)0x(select|insert|update|delete|union|drop|exec|from|where)"
+action: BLOCK
+
+---
+id: SQLI-023
+description: "Comment-based evasion: inline comment /**/"
+severity: high
+target: ARGS
+pattern: "/\\*.*\\*/.*(select|insert|update|delete|union|drop)"
+action: BLOCK
+
+---
+id: SQLI-024
+description: "Double-encoded SQL keywords"
+severity: high
+target: ARGS
+pattern: "(?i)%2527|%2522|%253b|%252d%252d"
+action: BLOCK
+
+---
+id: SQLI-025
+description: "SQL comment sequences: -- or # at end"
+severity: medium
+target: ARGS
+pattern: "(?i)('\\s*(--|#)|(\"\\s*(--|#)))"
+action: BLOCK
+
+---
+id: SQLI-026
+description: "Stacked queries: semicolon-separated statements"
+severity: high
+target: ARGS
+pattern: "(?i);\\s*(select|insert|update|delete|drop|exec|alter|create|truncate)"
+action: BLOCK
+
+---
+id: SQLI-027
+description: "Stacked queries in body"
+severity: high
+target: BODY
+pattern: "(?i);\\s*(select|insert|update|delete|drop|exec|alter|create|truncate)"
+action: BLOCK
+
+---
+id: SQLI-028
+description: "SQL injection in cookies"
+severity: high
+target: COOKIE
+pattern: "(?i)(union\\s+select|or\\s+\\d+\\s*=\\s*\\d+|drop\\s+table|insert\\s+into|xp_cmdshell)"
+action: BLOCK
+
+---
+id: SQLI-029
+description: "SQL injection in headers"
+severity: high
+target: HEADERS
+pattern: "(?i)(union\\s+select|or\\s+\\d+\\s*=\\s*\\d+|drop\\s+table|xp_cmdshell)"
+action: BLOCK
+
+---
+id: SQLI-030
+description: "WAITFOR DELAY in body"
+severity: critical
+target: BODY
+pattern: "(?i)waitfor\\s+delay"
+action: BLOCK
+
+---
+id: SQLI-031
+description: "INFORMATION_SCHEMA access"
+severity: critical
+target: ARGS
+pattern: "(?i)information_schema"
+action: BLOCK
+
+---
+id: SQLI-032
+description: "INFORMATION_SCHEMA in body"
+severity: critical
+target: BODY
+pattern: "(?i)information_schema"
+action: BLOCK
+
+---
+id: SQLI-033
+description: "LOAD_FILE() function"
+severity: critical
+target: ARGS
+pattern: "(?i)load_file\\s*\\("
+action: BLOCK
+
+---
+id: SQLI-034
+description: "INTO OUTFILE / INTO DUMPFILE"
+severity: critical
+target: ARGS
+pattern: "(?i)into\\s+(outfile|dumpfile)"
+action: BLOCK
+
+---
+id: SQLI-035
+description: "INTO OUTFILE / INTO DUMPFILE in body"
+severity: critical
+target: BODY
+pattern: "(?i)into\\s+(outfile|dumpfile)"
+action: BLOCK
+
+---
+id: SQLI-036
+description: "BENCHMARK() in body"
+severity: critical
+target: BODY
+pattern: "(?i)benchmark\\s*\\(\\s*\\d+"
+action: BLOCK
+
+---
+id: SQLI-037
+description: "pg_sleep() time-based blind"
+severity: critical
+target: ARGS
+pattern: "(?i)pg_sleep\\s*\\("
+action: BLOCK
+
+---
+id: SQLI-038
+description: "pg_sleep() in body"
+severity: critical
+target: BODY
+pattern: "(?i)pg_sleep\\s*\\("
+action: BLOCK
+
+---
+id: SQLI-039
+description: "Boolean-based blind string comparison in body"
+severity: critical
+target: BODY
+pattern: "(?i)\\b(or|and)\\b\\s+['\"]\\w+['\"]\\s*=\\s*['\"]\\w+['\"]"
+action: BLOCK
+
+---
+id: SQLI-040
+description: "Error-based: EXTRACTVALUE/UPDATEXML"
+severity: critical
+target: ARGS
+pattern: "(?i)(extractvalue|updatexml)\\s*\\("
+action: BLOCK
+
+---
+id: SQLI-041
+description: "Error-based: EXTRACTVALUE/UPDATEXML in body"
+severity: critical
+target: BODY
+pattern: "(?i)(extractvalue|updatexml)\\s*\\("
+action: BLOCK
+
+---
+id: SQLI-042
+description: "HAVING clause injection in body"
+severity: high
+target: BODY
+pattern: "(?i)\\bhaving\\s+\\d+\\s*=\\s*\\d+"
+action: BLOCK
+
+---
+id: SQLI-043
+description: "GROUP BY with HAVING injection in body"
+severity: high
+target: BODY
+pattern: "(?i)group\\s+by\\s+.+\\bhaving\\b"
+action: BLOCK
+
+---
+id: SQLI-044
+description: "MySQL conditional comment evasion in body"
+severity: high
+target: BODY
+pattern: "(?i)/\\*!\\d*\\s*(select|union|insert|update|delete|drop|exec)\\b"
+action: BLOCK
+
+---
+id: SQLI-045
+description: "MySQL conditional comment evasion"
+severity: high
+target: ARGS
+pattern: "(?i)/\\*!\\d*\\s*(select|union|insert|update|delete|drop|exec)\\b"
+action: BLOCK

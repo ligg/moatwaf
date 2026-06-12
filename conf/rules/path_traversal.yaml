@@ -1,0 +1,203 @@
+# Path Traversal Detection Rules
+# Covers: dot-dot sequences, encoded variants, null byte injection,
+#         sensitive OS files, config file access, web framework files
+
+---
+id: PTRV-001
+description: "Unix path traversal: ../"
+severity: critical
+target: URI
+pattern: "\\.\\./"
+action: BLOCK
+
+---
+id: PTRV-002
+description: "Path traversal in query string"
+severity: critical
+target: ARGS
+pattern: "\\.\\./"
+action: BLOCK
+
+---
+id: PTRV-003
+description: "Path traversal in body"
+severity: critical
+target: BODY
+pattern: "\\.\\./"
+action: BLOCK
+
+---
+id: PTRV-004
+description: "URL-encoded path traversal: %2e%2e%2f"
+severity: critical
+target: ARGS
+pattern: "(?i)%2e%2e(%2f|%5c)"
+action: BLOCK
+
+---
+id: PTRV-005
+description: "URL-encoded path traversal in URI"
+severity: critical
+target: URI
+pattern: "(?i)%2e%2e(%2f|%5c)"
+action: BLOCK
+
+---
+id: PTRV-006
+description: "Windows path traversal: ..\\"
+severity: critical
+target: URI
+pattern: "\\.\\.\\\\"
+action: BLOCK
+
+---
+id: PTRV-007
+description: "Windows path traversal in args"
+severity: critical
+target: ARGS
+pattern: "\\.\\.\\\\"
+action: BLOCK
+
+---
+id: PTRV-008
+description: "Null byte injection in URI"
+severity: critical
+target: URI
+pattern: "%00|\\\\x00|\\\\0"
+action: BLOCK
+
+---
+id: PTRV-009
+description: "Null byte injection in args"
+severity: critical
+target: ARGS
+pattern: "%00|\\\\x00"
+action: BLOCK
+
+---
+id: PTRV-010
+description: "/etc/passwd access"
+severity: critical
+target: URI
+pattern: "(?i)/etc/passwd"
+action: BLOCK
+
+---
+id: PTRV-011
+description: "/etc/passwd in args"
+severity: critical
+target: ARGS
+pattern: "(?i)/etc/passwd"
+action: BLOCK
+
+---
+id: PTRV-012
+description: "/etc/shadow access"
+severity: critical
+target: URI
+pattern: "(?i)/etc/shadow"
+action: BLOCK
+
+---
+id: PTRV-013
+description: "/proc/self access"
+severity: critical
+target: URI
+pattern: "(?i)/proc/self"
+action: BLOCK
+
+---
+id: PTRV-014
+description: "/proc/self in args"
+severity: critical
+target: ARGS
+pattern: "(?i)/proc/self"
+action: BLOCK
+
+---
+id: PTRV-015
+description: "WEB-INF directory access"
+severity: high
+target: URI
+pattern: "(?i)WEB-INF/(web\\.xml|classes|lib)"
+action: BLOCK
+
+---
+id: PTRV-016
+description: ".env file access"
+severity: high
+target: URI
+pattern: "(?i)/\\.env($|/|\\.)"
+action: BLOCK
+
+---
+id: PTRV-017
+description: ".git directory access"
+severity: high
+target: URI
+pattern: "(?i)/\\.git($|/|\\.)"
+action: BLOCK
+
+---
+id: PTRV-018
+description: ".git in args"
+severity: high
+target: ARGS
+pattern: "(?i)\\.git/"
+action: BLOCK
+
+---
+id: PTRV-019
+description: "Common config file access"
+severity: high
+target: URI
+pattern: "(?i)(/etc/(hosts|resolv\\.conf|issue|motd|crontab)|/var/log/)"
+action: BLOCK
+
+---
+id: PTRV-020
+description: "/etc/passwd in body"
+severity: critical
+target: BODY
+pattern: "(?i)/etc/(passwd|shadow)"
+action: BLOCK
+
+---
+id: PTRV-021
+description: "Double-encoded path traversal"
+severity: critical
+target: ARGS
+pattern: "(?i)%252e%252e(%252f|%255c)"
+action: BLOCK
+
+---
+id: PTRV-022
+description: "Double-encoded path traversal in URI"
+severity: critical
+target: URI
+pattern: "(?i)%252e%252e(%252f|%255c)"
+action: BLOCK
+
+---
+id: PTRV-023
+description: ".svn directory access"
+severity: high
+target: URI
+pattern: "(?i)/\\.svn($|/|\\.)"
+action: BLOCK
+
+---
+id: PTRV-024
+description: "Path traversal in cookies"
+severity: high
+target: COOKIE
+pattern: "(?i)(\\.\\./|\\.\\.\\\\|/etc/passwd|/proc/self)"
+action: BLOCK
+
+---
+id: PTRV-025
+description: "Path traversal in headers"
+severity: high
+target: HEADERS
+pattern: "(?i)(\\.\\./|\\.\\.\\\\|/etc/passwd)"
+action: BLOCK

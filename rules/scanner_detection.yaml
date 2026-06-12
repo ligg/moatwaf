@@ -1,0 +1,136 @@
+# Scanner and Bot Detection Rules
+# Detects vulnerability scanners, directory brute-forcers, and known attack tools
+
+---
+id: SCAN_001
+description: "Scanner - Nikto"
+target: HEADERS
+pattern: "(?i)nikto"
+action: block
+severity: high
+---
+id: SCAN_002
+description: "Scanner - SQLMap"
+target: HEADERS
+pattern: "(?i)sqlmap"
+action: block
+severity: high
+---
+id: SCAN_003
+description: "Scanner - Nmap/NSE"
+target: HEADERS
+pattern: "(?i)(nmap|nse)"
+action: block
+severity: high
+---
+id: SCAN_004
+description: "Scanner - DirBuster/Dirbuster"
+target: HEADERS
+pattern: "(?i)dirbuster"
+action: block
+severity: high
+---
+id: SCAN_005
+description: "Scanner - Nessus"
+target: HEADERS
+pattern: "(?i)nessus"
+action: block
+severity: high
+---
+id: SCAN_006
+description: "Scanner - Acunetix"
+target: HEADERS
+pattern: "(?i)acunetix"
+action: block
+severity: high
+---
+id: SCAN_007
+description: "Scanner - Burp Suite"
+target: HEADERS
+pattern: "(?i)burp"
+action: block
+severity: medium
+---
+id: SCAN_008
+description: "Scanner - ZAP"
+target: HEADERS
+pattern: "(?i)(owasp\\s*zap|zaproxy)"
+action: block
+severity: high
+---
+id: SCAN_009
+description: "Scanner - W3af"
+target: HEADERS
+pattern: "(?i)w3af"
+action: block
+severity: high
+---
+id: SCAN_010
+description: "Scanner - Havij"
+target: HEADERS
+pattern: "(?i)havij"
+action: block
+severity: high
+---
+id: SCAN_011
+description: "Scanner - Metasploit"
+target: HEADERS
+pattern: "(?i)metasploit"
+action: block
+severity: critical
+---
+id: SCAN_012
+description: "Scanner - OpenVAS"
+target: HEADERS
+pattern: "(?i)openvas"
+action: block
+severity: high
+---
+id: SCAN_013
+description: "Scanner - Qualys"
+target: HEADERS
+pattern: "(?i)qualys"
+action: block
+severity: high
+---
+id: SCAN_014
+description: "Scanner - Masscan"
+target: HEADERS
+pattern: "(?i)masscan"
+action: block
+severity: high
+---
+id: SCAN_015
+description: "Scanner - Generic scanner User-Agent"
+target: HEADERS
+pattern: "(?i)(scanner|vulnerability|exploit|penetration|hack)"
+action: block
+severity: high
+---
+id: SCAN_016
+description: "Scanner - Missing or empty User-Agent"
+target: HEADERS
+pattern: "^$"
+action: log
+severity: medium
+---
+id: SCAN_017
+description: "Scanner - Go http client (automated)"
+target: HEADERS
+pattern: "(?i)^go-http-client"
+action: log
+severity: low
+---
+id: SCAN_018
+description: "Scanner - Python requests (automated)"
+target: HEADERS
+pattern: "(?i)^python-requests"
+action: log
+severity: low
+---
+id: SCAN_019
+description: "Scanner - cURL user agent"
+target: HEADERS
+pattern: "(?i)^curl/"
+action: log
+severity: low

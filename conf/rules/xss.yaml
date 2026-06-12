@@ -1,0 +1,315 @@
+# Cross-Site Scripting (XSS) Detection Rules
+# Covers: reflected XSS, stored XSS patterns, DOM-based indicators,
+#         event handlers, javascript: protocol, data: URI, SVG-based
+
+---
+id: XSS-001
+description: "Script tag injection"
+severity: critical
+target: ARGS
+pattern: "(?i)<\\s*script[^>]*>"
+action: BLOCK
+
+---
+id: XSS-002
+description: "Script tag in body"
+severity: critical
+target: BODY
+pattern: "(?i)<\\s*script[^>]*>"
+action: BLOCK
+
+---
+id: XSS-003
+description: "Script tag in URI"
+severity: critical
+target: URI
+pattern: "(?i)<\\s*script"
+action: BLOCK
+
+---
+id: XSS-004
+description: "Event handler: onerror"
+severity: high
+target: ARGS
+pattern: "(?i)\\bonerror\\s*="
+action: BLOCK
+
+---
+id: XSS-005
+description: "Event handler: onload"
+severity: high
+target: ARGS
+pattern: "(?i)\\bonload\\s*="
+action: BLOCK
+
+---
+id: XSS-006
+description: "Event handler: onmouseover"
+severity: high
+target: ARGS
+pattern: "(?i)\\bonmouseover\\s*="
+action: BLOCK
+
+---
+id: XSS-007
+description: "Event handler: onclick"
+severity: high
+target: ARGS
+pattern: "(?i)\\bonclick\\s*="
+action: BLOCK
+
+---
+id: XSS-008
+description: "Event handler: onfocus"
+severity: high
+target: ARGS
+pattern: "(?i)\\bonfocus\\s*="
+action: BLOCK
+
+---
+id: XSS-009
+description: "Event handlers in body"
+severity: high
+target: BODY
+pattern: "(?i)\\bon(error|load|mouseover|click|focus|blur|submit|change|input|keydown|keyup)\\s*="
+action: BLOCK
+
+---
+id: XSS-010
+description: "javascript: protocol"
+severity: critical
+target: ARGS
+pattern: "(?i)javascript\\s*:"
+action: BLOCK
+
+---
+id: XSS-011
+description: "javascript: protocol in URI"
+severity: critical
+target: URI
+pattern: "(?i)javascript\\s*:"
+action: BLOCK
+
+---
+id: XSS-012
+description: "data:text/html URI"
+severity: critical
+target: ARGS
+pattern: "(?i)data\\s*:\\s*text/html"
+action: BLOCK
+
+---
+id: XSS-013
+description: "SVG onload injection"
+severity: high
+target: ARGS
+pattern: "(?i)<\\s*svg[^>]*\\bonload\\s*="
+action: BLOCK
+
+---
+id: XSS-014
+description: "SVG onload in body"
+severity: high
+target: BODY
+pattern: "(?i)<\\s*svg[^>]*\\bonload\\s*="
+action: BLOCK
+
+---
+id: XSS-015
+description: "IMG SRC onerror"
+severity: high
+target: ARGS
+pattern: "(?i)<\\s*img[^>]+onerror\\s*="
+action: BLOCK
+
+---
+id: XSS-016
+description: "IMG SRC onerror in body"
+severity: high
+target: BODY
+pattern: "(?i)<\\s*img[^>]+onerror\\s*="
+action: BLOCK
+
+---
+id: XSS-017
+description: "eval() call"
+severity: high
+target: ARGS
+pattern: "(?i)\\beval\\s*\\("
+action: BLOCK
+
+---
+id: XSS-018
+description: "eval() in body"
+severity: high
+target: BODY
+pattern: "(?i)\\beval\\s*\\("
+action: BLOCK
+
+---
+id: XSS-019
+description: "document.cookie access"
+severity: high
+target: ARGS
+pattern: "(?i)document\\.cookie"
+action: BLOCK
+
+---
+id: XSS-020
+description: "alert/confirm/prompt dialog calls"
+severity: medium
+target: ARGS
+pattern: "(?i)\\b(alert|confirm|prompt)\\s*\\("
+action: BLOCK
+
+---
+id: XSS-021
+description: "alert/confirm/prompt in body"
+severity: medium
+target: BODY
+pattern: "(?i)\\b(alert|confirm|prompt)\\s*\\("
+action: BLOCK
+
+---
+id: XSS-022
+description: "document.write / document.writeln"
+severity: high
+target: ARGS
+pattern: "(?i)document\\.write(ln)?\\s*\\("
+action: BLOCK
+
+---
+id: XSS-023
+description: "innerHTML assignment"
+severity: high
+target: ARGS
+pattern: "(?i)\\.innerHTML\\s*="
+action: BLOCK
+
+---
+id: XSS-024
+description: "XSS in cookies"
+severity: high
+target: COOKIE
+pattern: "(?i)(<\\s*script|javascript\\s*:|\\bon\\w+\\s*=)"
+action: BLOCK
+
+---
+id: XSS-025
+description: "XSS in headers"
+severity: high
+target: HEADERS
+pattern: "(?i)(<\\s*script|javascript\\s*:|\\bon\\w+\\s*=)"
+action: BLOCK
+
+---
+id: XSS-026
+description: "Base64-encoded script tag"
+severity: high
+target: ARGS
+pattern: "(?i)PHNjcmlwdA=="
+action: BLOCK
+
+---
+id: XSS-027
+description: "vbscript: protocol"
+severity: high
+target: ARGS
+pattern: "(?i)vbscript\\s*:"
+action: BLOCK
+
+---
+id: XSS-028
+description: "expression() CSS XSS (IE)"
+severity: high
+target: ARGS
+pattern: "(?i)expression\\s*\\("
+action: BLOCK
+
+---
+id: XSS-029
+description: "Body/iframe/object/embed injection"
+severity: high
+target: ARGS
+pattern: "(?i)<\\s*(body|iframe|object|embed|applet)[^>]*>"
+action: BLOCK
+
+---
+id: XSS-030
+description: "Body/iframe/object/embed in request body"
+severity: high
+target: BODY
+pattern: "(?i)<\\s*(iframe|object|embed|applet)[^>]*>"
+action: BLOCK
+
+---
+id: XSS-031
+description: "Meta refresh injection"
+severity: high
+target: ARGS
+pattern: "(?i)<meta[^>]+http-equiv\\s*=\\s*[\"']?refresh"
+action: BLOCK
+
+---
+id: XSS-032
+description: "Meta refresh in body"
+severity: high
+target: BODY
+pattern: "(?i)<meta[^>]+http-equiv\\s*=\\s*[\"']?refresh"
+action: BLOCK
+
+---
+id: XSS-033
+description: "Style attribute with url() function"
+severity: high
+target: ARGS
+pattern: "(?i)style\\s*=\\s*[\"'][^\"']*url\\s*\\("
+action: BLOCK
+
+---
+id: XSS-034
+description: "srcdoc attribute injection"
+severity: high
+target: ARGS
+pattern: "(?i)srcdoc\\s*="
+action: BLOCK
+
+---
+id: XSS-035
+description: "Base tag injection"
+severity: high
+target: ARGS
+pattern: "(?i)<base\\s+href"
+action: BLOCK
+
+---
+id: XSS-036
+description: "Base tag injection in body"
+severity: high
+target: BODY
+pattern: "(?i)<base\\s+href"
+action: BLOCK
+
+---
+id: XSS-037
+description: "vbscript: protocol in body"
+severity: high
+target: BODY
+pattern: "(?i)vbscript\\s*:"
+action: BLOCK
+
+---
+id: XSS-038
+description: "Base64-encoded <script> tag"
+severity: high
+target: ARGS
+pattern: "(?i)PHNjcmlwdA=="
+action: BLOCK
+
+---
+id: XSS-039
+description: "Base64-encoded <script> tag in body"
+severity: high
+target: BODY
+pattern: "(?i)PHNjcmlwdA=="
+action: BLOCK

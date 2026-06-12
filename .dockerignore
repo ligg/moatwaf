@@ -1,0 +1,10 @@
+tests/
+docs/
+.git/
+.gitignore
+.claude/
+*.md
+!README.md
+__pycache__/
+*.pyc
+.luarc.json

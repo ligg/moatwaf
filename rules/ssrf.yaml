@@ -1,0 +1,108 @@
+# SSRF (Server-Side Request Forgery) Detection Rules
+# Matches common SSRF attack patterns in URI, ARGS, and BODY
+
+---
+id: SSRF_001
+description: "SSRF - Internal IP address in request"
+target: ARGS
+pattern: "(?i)(127\\.0\\.0\\.1|0\\.0\\.0\\.0|localhost)"
+action: block
+severity: high
+---
+id: SSRF_002
+description: "SSRF - Internal IP address in URI"
+target: URI
+pattern: "(?i)(127\\.0\\.0\\.1|0\\.0\\.0\\.0|localhost)"
+action: block
+severity: high
+---
+id: SSRF_003
+description: "SSRF - AWS metadata endpoint"
+target: ARGS
+pattern: "(?i)169\\.254\\.169\\.254"
+action: block
+severity: critical
+---
+id: SSRF_004
+description: "SSRF - AWS metadata endpoint in URI"
+target: URI
+pattern: "(?i)169\\.254\\.169\\.254"
+action: block
+severity: critical
+---
+id: SSRF_005
+description: "SSRF - GCP metadata endpoint"
+target: ARGS
+pattern: "(?i)metadata\\.google\\.internal"
+action: block
+severity: critical
+---
+id: SSRF_006
+description: "SSRF - File protocol access"
+target: ARGS
+pattern: "(?i)(file://|gopher://|dict://)"
+action: block
+severity: high
+---
+id: SSRF_007
+description: "SSRF - File protocol in URI"
+target: URI
+pattern: "(?i)(file://|gopher://|dict://)"
+action: block
+severity: high
+---
+id: SSRF_008
+description: "SSRF - URL with credentials (user@host)"
+target: ARGS
+pattern: "(?i)https?://[^@]*@"
+action: block
+severity: medium
+---
+id: SSRF_009
+description: "SSRF - Private network ranges in request"
+target: ARGS
+pattern: "(?i)(10\\.\\d+\\.\\d+\\.\\d+|172\\.(1[6-9]|2\\d|3[01])\\.\\d+\\.\\d+|192\\.168\\.\\d+\\.\\d+)"
+action: block
+severity: high
+---
+id: SSRF_010
+description: "SSRF - Private network ranges in URI"
+target: URI
+pattern: "(?i)(10\\.\\d+\\.\\d+\\.\\d+|172\\.(1[6-9]|2\\d|3[01])\\.\\d+\\.\\d+|192\\.168\\.\\d+\\.\\d+)"
+action: block
+severity: high
+---
+id: SSRF_011
+description: "SSRF - IPv6 loopback address"
+target: ARGS
+pattern: "(?i)(\\[::1\\]|\\[0:0:0:0:0:0:0:1\\])"
+action: block
+severity: high
+---
+id: SSRF_012
+description: "SSRF - Encoded internal address bypass"
+target: ARGS
+pattern: "(?i)(0x7f000001|01770000001|2130706433)"
+action: block
+severity: high
+---
+id: SSRF_013
+description: "SSRF - Cloud metadata in BODY"
+target: BODY
+pattern: "(?i)(169\\.254\\.169\\.254|metadata\\.google\\.internal)"
+action: block
+severity: critical
+---
+id: SSRF_014
+description: "SSRF - Internal address in BODY"
+target: BODY
+pattern: "(?i)(127\\.0\\.0\\.1|0\\.0\\.0\\.0|localhost)"
+action: block
+severity: high
+---
+id: SSRF_015
+description: "SSRF - URL redirect parameter manipulation"
+target: ARGS
+pattern: "(?i)(redirect|url|next|return|goto|dest|destination|redir|link|target|ref|feed|host|addr|ip|domain|site|proxy|callback|cb|continue|to|out|view|path|page|uri|val|value|data|src|source|forward|location)\\s*=\\s*https?://"
+action: log
+severity: medium

@@ -1,0 +1,131 @@
+# Protocol Attack Detection Rules
+# Covers: HTTP request smuggling, header injection, method override,
+#         CRLF injection, oversized headers, host header attacks
+
+---
+id: PROTO-001
+description: "CRLF injection in URI (%0d%0a)"
+severity: critical
+target: URI
+pattern: "(?i)(%0d%0a|%0a|%0d|\\r\\n)"
+action: BLOCK
+
+---
+id: PROTO-002
+description: "CRLF injection in query parameters"
+severity: critical
+target: ARGS
+pattern: "(?i)(%0d%0a|%0a|%0d|\\r\\n)"
+action: BLOCK
+
+---
+id: PROTO-003
+description: "CRLF injection in body"
+severity: critical
+target: BODY
+pattern: "(?i)(%0d%0a|%0a|%0d)"
+action: BLOCK
+
+---
+id: PROTO-004
+description: "HTTP method override via X-HTTP-Method-Override"
+severity: medium
+target: HEADERS
+pattern: "(?i)X-HTTP-Method-Override:\\s*(DELETE|PUT|PATCH|TRACE|CONNECT)"
+action: BLOCK
+
+---
+id: PROTO-005
+description: "HTTP method override via X-Method-Override"
+severity: medium
+target: HEADERS
+pattern: "(?i)X-Method-Override:\\s*(DELETE|PUT|PATCH|TRACE|CONNECT)"
+action: BLOCK
+
+---
+id: PROTO-006
+description: "X-Forwarded-Host header injection"
+severity: high
+target: HEADERS
+pattern: "(?i)X-Forwarded-Host:\\s*[^\\s]*(<|>|\"|'|\\(|\\))"
+action: BLOCK
+
+---
+id: PROTO-007
+description: "TRACE method request"
+severity: high
+target: HEADERS
+pattern: "(?i)^TRACE\\s"
+action: BLOCK
+
+---
+id: PROTO-008
+description: "CONNECT method request"
+severity: high
+target: HEADERS
+pattern: "(?i)^CONNECT\\s"
+action: BLOCK
+
+---
+id: PROTO-009
+description: "Host header: localhost / internal addresses"
+severity: high
+target: HEADERS
+pattern: "(?i)Host:\\s*(127\\.0\\.0\\.1|localhost|0\\.0\\.0\\.0|10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.)"
+action: BLOCK
+
+---
+id: PROTO-010
+description: "Double Content-Length header (smuggling)"
+severity: critical
+target: HEADERS
+pattern: "(?i)Content-Length:\\s*\\d+.*Content-Length:"
+action: BLOCK
+
+---
+id: PROTO-011
+description: "Transfer-Encoding obfuscation: non-standard casing or extra values"
+severity: critical
+target: HEADERS
+pattern: "(?i)(?:[\\s,]+chunked|chunked[\\s,]+\\w)"
+action: BLOCK
+
+---
+id: PROTO-012
+description: "Malformed Transfer-Encoding (smuggling variant)"
+severity: critical
+target: HEADERS
+pattern: "(?i)Transfer-Encoding:\\s*(identity|compress|deflate|gzip)"
+action: BLOCK
+
+---
+id: PROTO-013
+description: "X-Original-URL / X-Rewrite-URL path override"
+severity: high
+target: HEADERS
+pattern: "(?i)X-(Original-URL|Rewrite-URL):\\s*"
+action: BLOCK
+
+---
+id: PROTO-014
+description: "CRLF injection in headers"
+severity: critical
+target: HEADERS
+pattern: "(?i)(%0d%0a|%0a|%0d|\\r\\n).*(Location|Set-Cookie|Content-Type)"
+action: BLOCK
+
+---
+id: PROTO-015
+description: "HTTP request smuggling: chunk size manipulation"
+severity: high
+target: BODY
+pattern: "^0\\r\\n\\r\\n(POST|PUT|PATCH|DELETE|GET)"
+action: BLOCK
+
+---
+id: PROTO-016
+description: "Host header with port manipulation"
+severity: medium
+target: HEADERS
+pattern: "(?i)Host:\\s*[^:]+:(6553[6-9]|655[4-9]\\d|65[6-9]\\d{2}|[7-9]\\d{4}|\\d{6,})"
+action: BLOCK

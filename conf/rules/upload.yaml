@@ -1,0 +1,33 @@
+# Upload Detection Rules
+# File upload validation rules for the upload_check module
+# These rules are evaluated by lib/upload_check.lua, not the rule engine
+
+---
+id: UPLOAD-001
+description: "Dangerous file extension"
+severity: critical
+action: block
+targets: [FILENAME]
+check: extension_blocklist
+---
+id: UPLOAD-002
+description: "File size exceeds 10MB limit"
+severity: medium
+action: block
+targets: [BODY]
+check: size_limit
+limit: 10485760
+---
+id: UPLOAD-003
+description: "Content type mismatch - declared type does not match file content"
+severity: high
+action: block
+targets: [BODY, CONTENT_TYPE]
+check: content_validation
+---
+id: UPLOAD-004
+description: "Shell code injection in file content"
+severity: high
+action: block
+targets: [BODY]
+check: shell_code_detection

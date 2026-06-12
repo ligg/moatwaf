@@ -1,0 +1,115 @@
+# Cross-Site Scripting (XSS) Detection Rules
+# Matches common XSS patterns in URI, ARGS, BODY, HEADERS, and COOKIE
+
+---
+id: XSS_001
+description: "XSS - Script tag injection"
+target: ARGS
+pattern: "(?i)<\\s*script[^>]*>"
+action: block
+severity: critical
+---
+id: XSS_002
+description: "XSS - Script tag in URI"
+target: URI
+pattern: "(?i)<\\s*script[^>]*>"
+action: block
+severity: critical
+---
+id: XSS_003
+description: "XSS - Event handler injection"
+target: ARGS
+pattern: "(?i)(on\\w+)\\s*=\\s*['\"]?\\s*javascript:"
+action: block
+severity: critical
+---
+id: XSS_004
+description: "XSS - javascript: URI scheme"
+target: ARGS
+pattern: "(?i)javascript\\s*:"
+action: block
+severity: high
+---
+id: XSS_005
+description: "XSS - javascript: URI in query string"
+target: URI
+pattern: "(?i)javascript\\s*:"
+action: block
+severity: high
+---
+id: XSS_006
+description: "XSS - data: URI scheme with HTML"
+target: ARGS
+pattern: "(?i)data\\s*:[^,]*html"
+action: block
+severity: high
+---
+id: XSS_007
+description: "XSS - Expression/VBS injection"
+target: ARGS
+pattern: "(?i)(expression\\s*\\(|vbscript\\s*:)"
+action: block
+severity: high
+---
+id: XSS_008
+description: "XSS - SVG onload injection"
+target: ARGS
+pattern: "(?i)<\\s*svg[^>]*onload"
+action: block
+severity: critical
+---
+id: XSS_009
+description: "XSS - IMG/IFRAME/EMBED injection"
+target: ARGS
+pattern: "(?i)<\\s*(img|iframe|embed|object|applet|form|input|body|meta|link|base)\\s+[^>]*(src|href|action|data)\\s*=\\s*['\"]?\\s*javascript:"
+action: block
+severity: critical
+---
+id: XSS_010
+description: "XSS - HTML entity encoded script"
+target: ARGS
+pattern: "(?i)&\\s*(lt|gt|#60|#62|#x3[Cc]|#x3[Ee])\\s*;\\s*script"
+action: block
+severity: high
+---
+id: XSS_011
+description: "XSS - eval() function"
+target: ARGS
+pattern: "(?i)eval\\s*\\("
+action: block
+severity: high
+---
+id: XSS_012
+description: "XSS - document.cookie access"
+target: ARGS
+pattern: "(?i)document\\s*\\.\\s*cookie"
+action: block
+severity: high
+---
+id: XSS_013
+description: "XSS - document.write injection"
+target: ARGS
+pattern: "(?i)document\\s*\\.\\s*write(ln)?\\s*\\("
+action: block
+severity: high
+---
+id: XSS_014
+description: "XSS - Script injection in User-Agent"
+target: HEADERS
+pattern: "(?i)<\\s*script|javascript\\s*:|on\\w+\\s*="
+action: block
+severity: high
+---
+id: XSS_015
+description: "XSS - Script injection in Referer"
+target: HEADERS
+pattern: "(?i)<\\s*script|javascript\\s*:"
+action: block
+severity: high
+---
+id: XSS_016
+description: "XSS - script/src in Cookie"
+target: COOKIE
+pattern: "(?i)(<\\s*script|javascript\\s*:)"
+action: block
+severity: high

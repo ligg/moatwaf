@@ -1,0 +1,283 @@
+# Command Injection Detection Rules
+# Covers: shell metacharacters, command chaining, shell execution,
+#         download tools, reverse shells, process substitution
+
+---
+id: CMDI-001
+description: "Pipe to shell execution"
+severity: critical
+target: ARGS
+pattern: "\\|\\s*(bash|sh|zsh|csh|ksh|dash|ash|ls|cat|id|whoami|uname|wget|curl|nc|rm|mv|cp|chmod|chown|kill|ps|find|grep|awk|sed|sort|head|tail|wc|env|echo|printf|python|perl|ruby|php|node|tar|zip|dd|mount|nmap|netstat|ifconfig|ping|traceroute|dig|nslookup|more|less|vi|vim|nano|tee|xargs)"
+action: BLOCK
+
+---
+id: CMDI-002
+description: "Pipe to shell in body"
+severity: critical
+target: BODY
+pattern: "\\|\\s*(bash|sh|zsh|csh|ksh|dash|ash|ls|cat|id|whoami|uname|wget|curl|nc|rm|mv|cp|chmod|chown|kill|ps|find|grep|awk|sed|sort|head|tail|wc|env|echo|printf|python|perl|ruby|php|node|tar|zip|dd|mount|nmap|netstat|ifconfig|ping|traceroute|dig|nslookup|more|less|vi|vim|nano|tee|xargs)"
+action: BLOCK
+
+---
+id: CMDI-003
+description: "Semicolon command chaining with shell"
+severity: critical
+target: ARGS
+pattern: ";\\s*(bash|sh|cmd|powershell|/bin/|whoami|id\\b|uname|cat|ls|curl|wget|nc\\b|rm|mv|cp|chmod|chown|kill|ps|find|grep|awk|sed|python|perl|ruby|php|node|env|echo|touch|mkdir|rmdir|ping|nmap|nslookup|dig|tar|zip|dd|mount|ifconfig|netstat|more|less|head|tail|tee|xargs)"
+action: BLOCK
+
+---
+id: CMDI-004
+description: "Semicolon command chaining in body"
+severity: critical
+target: BODY
+pattern: ";\\s*(bash|sh|cmd|powershell|/bin/|whoami|id\\b|uname|cat|ls|curl|wget|nc\\b|rm|mv|cp|chmod|chown|kill|ps|find|grep|awk|sed|python|perl|ruby|php|node|env|echo|touch|mkdir|rmdir|ping|nmap|nslookup|dig|tar|zip|dd|mount|ifconfig|netstat|more|less|head|tail|tee|xargs)"
+action: BLOCK
+
+---
+id: CMDI-005
+description: "Logical AND command chaining"
+severity: high
+target: ARGS
+pattern: "&&\\s*(bash|sh|cmd|powershell|curl|wget|nc|cat|ls|id|whoami|uname)"
+action: BLOCK
+
+---
+id: CMDI-006
+description: "Logical AND chaining in body"
+severity: high
+target: BODY
+pattern: "&&\\s*(bash|sh|cmd|powershell|curl|wget|nc|cat|ls|id|whoami|uname)"
+action: BLOCK
+
+---
+id: CMDI-007
+description: "Logical OR command chaining"
+severity: high
+target: ARGS
+pattern: "\\|\\|\\s*(bash|sh|cmd|powershell|curl|wget|nc|cat|ls|id|whoami)"
+action: BLOCK
+
+---
+id: CMDI-008
+description: "Backtick command substitution"
+severity: critical
+target: ARGS
+pattern: "`[^`]*(bash|sh|cmd|curl|wget|nc|cat|ls|id|whoami|uname|ping|nslookup)[^`]*`"
+action: BLOCK
+
+---
+id: CMDI-009
+description: "Backtick command substitution in body"
+severity: critical
+target: BODY
+pattern: "`[^`]*(bash|sh|cmd|curl|wget|nc|cat|ls|id|whoami|uname)[^`]*`"
+action: BLOCK
+
+---
+id: CMDI-010
+description: "$() command substitution"
+severity: critical
+target: ARGS
+pattern: "(?i)\\$\\([^)]+\\)"
+action: BLOCK
+
+---
+id: CMDI-011
+description: "$() command substitution in body"
+severity: critical
+target: BODY
+pattern: "\\$\\(.*\\)"
+action: BLOCK
+
+---
+id: CMDI-012
+description: "/bin/sh or /bin/bash execution"
+severity: critical
+target: ARGS
+pattern: "/bin/(sh|bash|zsh|csh|ksh|dash|ash)(\\s|$|;|\\|)"
+action: BLOCK
+
+---
+id: CMDI-013
+description: "/bin/sh in body"
+severity: critical
+target: BODY
+pattern: "/bin/(sh|bash|zsh|csh|ksh|dash|ash)(\\s|$|;|\\|)"
+action: BLOCK
+
+---
+id: CMDI-014
+description: "wget download and execute"
+severity: critical
+target: ARGS
+pattern: "(?i)wget\\s+.*(-O|--output-document)"
+action: BLOCK
+
+---
+id: CMDI-015
+description: "curl download and execute"
+severity: critical
+target: ARGS
+pattern: "(?i)curl\\s+.*(-o|--output|-k|--insecure).*(\\||;|&&)"
+action: BLOCK
+
+---
+id: CMDI-016
+description: "curl/wget in body"
+severity: critical
+target: BODY
+pattern: "(?i)(curl|wget)\\s+(https?://|ftp://)"
+action: BLOCK
+
+---
+id: CMDI-017
+description: "Netcat reverse shell"
+severity: critical
+target: ARGS
+pattern: "(?i)\\bnc(at)?\\s+.*(-e|-c)\\s*(/bin/)?(sh|bash)"
+action: BLOCK
+
+---
+id: CMDI-018
+description: "/dev/tcp reverse shell"
+severity: critical
+target: ARGS
+pattern: "(?i)/dev/tcp/"
+action: BLOCK
+
+---
+id: CMDI-019
+description: "/dev/tcp in body"
+severity: critical
+target: BODY
+pattern: "(?i)/dev/tcp/"
+action: BLOCK
+
+---
+id: CMDI-020
+description: "system() function call"
+severity: critical
+target: ARGS
+pattern: "(?i)\\bsystem\\s*\\("
+action: BLOCK
+
+---
+id: CMDI-021
+description: "exec() function call"
+severity: high
+target: ARGS
+pattern: "(?i)\\bexec\\s*\\("
+action: BLOCK
+
+---
+id: CMDI-022
+description: "system()/exec() in body"
+severity: critical
+target: BODY
+pattern: "(?i)\\b(system|passthru|proc_open|popen)\\s*\\("
+action: BLOCK
+
+---
+id: CMDI-023
+description: "Windows cmd.exe execution"
+severity: critical
+target: ARGS
+pattern: "(?i)(cmd\\.exe|cmd\\s+/c|powershell)"
+action: BLOCK
+
+---
+id: CMDI-024
+description: "Windows cmd/powershell in body"
+severity: critical
+target: BODY
+pattern: "(?i)(cmd\\.exe|cmd\\s+/c|powershell\\s+-[enNoop])"
+action: BLOCK
+
+---
+id: CMDI-025
+description: "Command injection in cookies"
+severity: high
+target: COOKIE
+pattern: "(?i)(;|\\||&&)\\s*(bash|sh|cmd|curl|wget|nc|id|whoami)"
+action: BLOCK
+
+---
+id: CMDI-026
+description: "Command injection in headers"
+severity: high
+target: HEADERS
+pattern: "(?i)(;|\\||&&)\\s*(bash|sh|cmd|curl|wget|nc|id|whoami)"
+action: BLOCK
+
+---
+id: CMDI-027
+description: "Newline-separated command injection"
+severity: high
+target: ARGS
+pattern: "(\\r\\n|\\n)\\s*(bash|sh|cmd|curl|wget|cat|ls|id)"
+action: BLOCK
+
+---
+id: CMDI-028
+description: "xargs / find -exec abuse"
+severity: high
+target: ARGS
+pattern: "(?i)\\b(find|xargs)\\b.*-exec"
+action: BLOCK
+
+---
+id: CMDI-029
+description: "Python reverse shell in body"
+severity: critical
+target: BODY
+pattern: "(?i)python[23]?\\s+(-c|\\-c).*(socket|subprocess|os\\.system|pty\\.spawn)"
+action: BLOCK
+
+---
+id: CMDI-030
+description: "Perl reverse shell in body"
+severity: critical
+target: BODY
+pattern: "(?i)perl\\s+(-e|\\-e).*(socket|INET|connect)"
+action: BLOCK
+
+---
+id: CMDI-031
+description: "eval() command execution in body"
+severity: critical
+target: BODY
+pattern: "(?i)\\beval\\s*[(\"]"
+action: BLOCK
+
+---
+id: CMDI-032
+description: "eval() command execution"
+severity: critical
+target: ARGS
+pattern: "(?i)\\beval\\s*[(\"]"
+action: BLOCK
+
+---
+id: CMDI-033
+description: "Telnet-based reverse shell"
+severity: critical
+target: BODY
+pattern: "(?i)telnet\\s+\\S+\\s+\\d+.*mkfifo"
+action: BLOCK
+
+---
+id: CMDI-034
+description: "Ruby reverse shell in body"
+severity: critical
+target: BODY
+pattern: "(?i)ruby\\s+(-e|\\-e).*(TCPSocket|socket|connect)"
+action: BLOCK
+
+---
+id: CMDI-035
+description: "PHP command execution in body"
+severity: critical
+target: BODY
+pattern: "(?i)php\\s+(-r|\\-r).*(system|exec|passthru|shell_exec|popen)"
+action: BLOCK

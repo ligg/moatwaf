@@ -1,0 +1,108 @@
+# Path Traversal Detection Rules
+# Matches directory traversal, file inclusion, and path manipulation attacks
+
+---
+id: PATH_001
+description: "Path Traversal - Dot-dot-slash sequences"
+target: URI
+pattern: "(\\.\\.\\/|\\.\\.\\\\)"
+action: block
+severity: critical
+---
+id: PATH_002
+description: "Path Traversal - Dot-dot-slash in query string"
+target: ARGS
+pattern: "(\\.\\.\\/|\\.\\.\\\\)"
+action: block
+severity: critical
+---
+id: PATH_003
+description: "Path Traversal - Encoded dot-dot-slash (%2e%2e%2f)"
+target: URI
+pattern: "(?i)(%2e%2e%2f|%2e%2e/|%2e\\/%2e|%252e%252e%252f)"
+action: block
+severity: critical
+---
+id: PATH_004
+description: "Path Traversal - Encoded dot-dot-slash in ARGS"
+target: ARGS
+pattern: "(?i)(%2e%2e%2f|%2e%2e/|%2e\\/%2e|%252e%252e%252f)"
+action: block
+severity: critical
+---
+id: PATH_005
+description: "Path Traversal - Unix sensitive files in URI"
+target: URI
+pattern: "(?i)(\\/etc\\/passwd|\\/etc\\/shadow|\\/etc\\/hosts|\\/proc\\/self)"
+action: block
+severity: critical
+---
+id: PATH_006
+description: "Path Traversal - Unix sensitive files in ARGS"
+target: ARGS
+pattern: "(?i)(\\/etc\\/passwd|\\/etc\\/shadow|\\/etc\\/hosts|\\/proc\\/self)"
+action: block
+severity: critical
+---
+id: PATH_007
+description: "Path Traversal - Windows sensitive files in URI"
+target: URI
+pattern: "(?i)(c:\\\\windows|c:\\/windows|c:\\\\win\\.ini|c:\\/win\\.ini)"
+action: block
+severity: critical
+---
+id: PATH_008
+description: "Path Traversal - Windows sensitive files in ARGS"
+target: ARGS
+pattern: "(?i)(c:\\\\windows|c:\\/windows|c:\\\\win\\.ini|c:\\/win\\.ini)"
+action: block
+severity: critical
+---
+id: PATH_009
+description: "Path Traversal - Null byte injection"
+target: URI
+pattern: "(%00|\\\\x00)"
+action: block
+severity: critical
+---
+id: PATH_010
+description: "Path Traversal - Null byte in ARGS"
+target: ARGS
+pattern: "(%00|\\\\x00)"
+action: block
+severity: critical
+---
+id: PATH_011
+description: "Path Traversal - PHP wrapper in ARGS"
+target: ARGS
+pattern: "(?i)(php:\\/\\/|php:\\/\\/input|php:\\/\\/filter|phar:\\/\\/)"
+action: block
+severity: critical
+---
+id: PATH_012
+description: "Path Traversal - PHP wrapper in URI"
+target: URI
+pattern: "(?i)(php:\\/\\/|php:\\/\\/input|php:\\/\\/filter|phar:\\/\\/)"
+action: block
+severity: critical
+---
+id: PATH_013
+description: "Path Traversal - LFI/RFI patterns in ARGS"
+target: ARGS
+pattern: "(?i)(\\.\\.\\/\\.\\.\\/\\.\\.\\/|\\.\\.\\\\\\.\\.\\\\\\.\\.\\\\)"
+action: block
+severity: critical
+---
+id: PATH_014
+description: "Path Traversal - Log file access"
+target: ARGS
+pattern: "(?i)(\\/var\\/log\\/|\\.log$|access\\.log|error\\.log)"
+action: block
+severity: high
+---
+id: PATH_015
+description: "Path Traversal - /dev/null in ARGS"
+target: ARGS
+pattern: "(?i)(\\/dev\\/null|\\/dev\\/urandom|\\/dev\\/random)"
+action: block
+severity: high

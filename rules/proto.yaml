@@ -1,0 +1,143 @@
+# Protocol-based Attack Detection Rules
+# Matches XXE, protocol abuse, and dangerous URI scheme patterns
+
+---
+id: PROTO_001
+description: "XXE - External entity declaration in XML"
+target: BODY
+pattern: "(?i)(<!ENTITY|<!DOCTYPE[^>]+\\[)"
+action: block
+severity: critical
+---
+id: PROTO_002
+description: "XXE - SYSTEM keyword in XML"
+target: BODY
+pattern: "(?i)SYSTEM\\s+[\"']"
+action: block
+severity: critical
+---
+id: PROTO_003
+description: "XXE - External DTD reference"
+target: BODY
+pattern: "(?i)<!DOCTYPE[^>]+PUBLIC"
+action: block
+severity: high
+---
+id: PROTO_004
+description: "Protocol - Dangerous URI schemes"
+target: ARGS
+pattern: "(?i)(jar://|netdoc://|expect://|ldap://|ldaps://|rmi://|jndi://)"
+action: block
+severity: high
+---
+id: PROTO_005
+description: "Protocol - Dangerous URI schemes in URI"
+target: URI
+pattern: "(?i)(jar://|netdoc://|expect://|ldap://|ldaps://|rmi://|jndi://)"
+action: block
+severity: high
+---
+id: PROTO_006
+description: "Protocol - data: URI with script content"
+target: ARGS
+pattern: "(?i)data:[^,]*script"
+action: block
+severity: high
+---
+id: PROTO_007
+description: "Protocol - javascript: URI in ARGS"
+target: ARGS
+pattern: "(?i)javascript\\s*:"
+action: block
+severity: high
+---
+id: PROTO_008
+description: "Protocol - vbscript: URI in ARGS"
+target: ARGS
+pattern: "(?i)vbscript\\s*:"
+action: block
+severity: high
+---
+id: PROTO_009
+description: "Protocol - SSI injection attempt"
+target: BODY
+pattern: "(?i)<!--\\s*#(exec|include|echo|config)"
+action: block
+severity: high
+---
+id: PROTO_010
+description: "Protocol - XML processing instruction"
+target: BODY
+pattern: "(?i)<\\?xml[^>]+encoding"
+action: log
+severity: medium
+---
+id: PROTO_011
+description: "Protocol - CDATA section with embedded code"
+target: BODY
+pattern: "(?i)<!\\[CDATA\\[.*?(script|eval|exec)"
+action: block
+severity: high
+---
+id: PROTO_012
+description: "Protocol - SOAPAction header injection"
+target: HEADERS
+pattern: "(?i)SOAPAction.*?(exec|eval|system|cmd)"
+action: block
+severity: high
+---
+id: PROTO_013
+description: "Protocol - Content-Type manipulation for XSS"
+target: HEADERS
+pattern: "(?i)Content-Type.*?text/html"
+action: log
+severity: medium
+---
+id: PROTO_014
+description: "Protocol - X-Forwarded-For header injection"
+target: HEADERS
+pattern: "(?i)X-Forwarded-For.*?(<script|javascript:|on\\w+=)"
+action: block
+severity: high
+---
+id: PROTO_015
+description: "Protocol - XML bomb / billion laughs"
+target: BODY
+pattern: "(?i)<!ENTITY[^>]+&\\w+;.*&\\w+;"
+action: block
+severity: critical
+---
+id: PROTO_016
+description: "Protocol - JNDI injection (Log4Shell style)"
+target: ARGS
+pattern: "(?i)\\$\\{jndi:(ldap|rmi|dns|corba|iiop)://"
+action: block
+severity: critical
+---
+id: PROTO_017
+description: "Protocol - JNDI injection in URI"
+target: URI
+pattern: "(?i)\\$\\{jndi:(ldap|rmi|dns|corba|iiop)://"
+action: block
+severity: critical
+---
+id: PROTO_018
+description: "Protocol - JNDI injection in headers"
+target: HEADERS
+pattern: "(?i)\\$\\{jndi:"
+action: block
+severity: critical
+---
+id: PROTO_019
+description: "Protocol - OGNL injection"
+target: ARGS
+pattern: "(?i)(#\\{|#context|#request|#session|#application)\\."
+action: block
+severity: high
+---
+id: PROTO_020
+description: "Protocol - Spring4Shell / class loader manipulation"
+target: ARGS
+pattern: "(?i)(class\\.module\\.loader|Runtime|ProcessBuilder)"
+action: block
+severity: critical

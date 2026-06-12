@@ -1,0 +1,339 @@
+# Server-Side Request Forgery (SSRF) Detection Rules
+# Covers: localhost references, cloud metadata endpoints, internal IP ranges,
+#         dangerous URI schemes, DNS rebinding indicators
+
+---
+id: SSRF-001
+description: "Localhost reference in URL parameter"
+severity: critical
+target: ARGS
+pattern: "(?i)(https?://|//)(127\\.0\\.0\\.1|localhost|0\\.0\\.0\\.0|\\[::1\\])"
+action: BLOCK
+
+---
+id: SSRF-002
+description: "Localhost in request body"
+severity: critical
+target: BODY
+pattern: "(?i)(https?://|//)(127\\.0\\.0\\.1|localhost|0\\.0\\.0\\.0|\\[::1\\])"
+action: BLOCK
+
+---
+id: SSRF-003
+description: "AWS metadata endpoint"
+severity: critical
+target: ARGS
+pattern: "(?i)(https?://|//)169\\.254\\.169\\.254"
+action: BLOCK
+
+---
+id: SSRF-004
+description: "AWS metadata in body"
+severity: critical
+target: BODY
+pattern: "(?i)(https?://|//)169\\.254\\.169\\.254"
+action: BLOCK
+
+---
+id: SSRF-005
+description: "GCP metadata endpoint"
+severity: critical
+target: ARGS
+pattern: "(?i)metadata\\.google\\.internal"
+action: BLOCK
+
+---
+id: SSRF-006
+description: "Azure metadata endpoint"
+severity: critical
+target: ARGS
+pattern: "(?i)(https?://|//)169\\.254\\.169\\.254/metadata"
+action: BLOCK
+
+---
+id: SSRF-007
+description: "file:// protocol"
+severity: critical
+target: ARGS
+pattern: "(?i)file://"
+action: BLOCK
+
+---
+id: SSRF-008
+description: "file:// protocol in body"
+severity: critical
+target: BODY
+pattern: "(?i)file://"
+action: BLOCK
+
+---
+id: SSRF-009
+description: "dict:// protocol"
+severity: critical
+target: ARGS
+pattern: "(?i)dict://"
+action: BLOCK
+
+---
+id: SSRF-010
+description: "gopher:// protocol"
+severity: critical
+target: ARGS
+pattern: "(?i)gopher://"
+action: BLOCK
+
+---
+id: SSRF-011
+description: "gopher:// protocol in body"
+severity: critical
+target: BODY
+pattern: "(?i)gopher://"
+action: BLOCK
+
+---
+id: SSRF-012
+description: "Internal IP in URL parameter (10.x.x.x)"
+severity: high
+target: ARGS
+pattern: "(?i)(https?://|//)10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}"
+action: BLOCK
+
+---
+id: SSRF-013
+description: "Internal IP in URL parameter (172.16-31.x.x)"
+severity: high
+target: ARGS
+pattern: "(?i)(https?://|//)172\\.(1[6-9]|2[0-9]|3[01])\\.\\d{1,3}\\.\\d{1,3}"
+action: BLOCK
+
+---
+id: SSRF-014
+description: "Internal IP in URL parameter (192.168.x.x)"
+severity: high
+target: ARGS
+pattern: "(?i)(https?://|//)192\\.168\\.\\d{1,3}\\.\\d{1,3}"
+action: BLOCK
+
+---
+id: SSRF-015
+description: "Internal IP in body (10.x.x.x)"
+severity: high
+target: BODY
+pattern: "(?i)(https?://|//)10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}"
+action: BLOCK
+
+---
+id: SSRF-016
+description: "Internal IP in body (192.168.x.x)"
+severity: high
+target: BODY
+pattern: "(?i)(https?://|//)192\\.168\\.\\d{1,3}\\.\\d{1,3}"
+action: BLOCK
+
+---
+id: SSRF-017
+description: "URL with decimal-encoded IP (2130706433 = 127.0.0.1)"
+severity: critical
+target: ARGS
+pattern: "(?i)(https?://|//)2130706433"
+action: BLOCK
+
+---
+id: SSRF-018
+description: "URL with hex-encoded IP (0x7f000001 = 127.0.0.1)"
+severity: critical
+target: ARGS
+pattern: "(?i)(https?://|//)0x7f000001"
+action: BLOCK
+
+---
+id: SSRF-019
+description: "SSRF via headers (X-Forwarded-For, Referer)"
+severity: high
+target: HEADERS
+pattern: "(?i)(X-Forwarded-Host|Referer):.*(127\\.0\\.0\\.1|169\\.254\\.169\\.254|10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.)"
+action: BLOCK
+
+---
+id: SSRF-020
+description: "Alibaba Cloud metadata endpoint"
+severity: critical
+target: ARGS
+pattern: "(?i)(https?://|//)100\\.100\\.100\\.200"
+action: BLOCK
+
+---
+id: SSRF-021
+description: "Kubernetes metadata endpoint"
+severity: critical
+target: ARGS
+pattern: "(?i)(https?://|//)kubernetes\\.default\\.svc"
+action: BLOCK
+
+---
+id: SSRF-022
+description: "SSRF in cookies"
+severity: high
+target: COOKIE
+pattern: "(?i)(127\\.0\\.0\\.1|169\\.254\\.169\\.254|localhost|file://|gopher://|dict://)"
+action: BLOCK
+
+---
+id: SSRF-023
+description: "IPv6 localhost in URL (bracket notation)"
+severity: critical
+target: ARGS
+pattern: "(?i)(http|https|ftp)://\\[::1\\]"
+action: BLOCK
+
+---
+id: SSRF-024
+description: "IPv6 localhost in URI"
+severity: critical
+target: URI
+pattern: "(?i)(http|https|ftp)://\\[::1\\]"
+action: BLOCK
+
+---
+id: SSRF-025
+description: "IPv6 localhost in body"
+severity: critical
+target: BODY
+pattern: "(?i)(http|https|ftp)://\\[::1\\]"
+action: BLOCK
+
+---
+id: SSRF-026
+description: "IPv6 link-local in URL"
+severity: critical
+target: ARGS
+pattern: "(?i)(http|https|ftp)://\\[fe80:"
+action: BLOCK
+
+---
+id: SSRF-027
+description: "IPv6 link-local in body"
+severity: critical
+target: BODY
+pattern: "(?i)(http|https|ftp)://\\[fe80:"
+action: BLOCK
+
+---
+id: SSRF-028
+description: "IPv6 private range fd00::/8 in URL"
+severity: critical
+target: ARGS
+pattern: "(?i)(http|https|ftp)://\\[fd"
+action: BLOCK
+
+---
+id: SSRF-029
+description: "IPv6 private range fd00::/8 in body"
+severity: critical
+target: BODY
+pattern: "(?i)(http|https|ftp)://\\[fd"
+action: BLOCK
+
+---
+id: SSRF-030
+description: "gopher:// protocol in body"
+severity: critical
+target: BODY
+pattern: "(?i)gopher://"
+action: BLOCK
+
+---
+id: SSRF-031
+description: "dict:// protocol in body"
+severity: critical
+target: BODY
+pattern: "(?i)dict://"
+action: BLOCK
+
+---
+id: SSRF-032
+description: "Cloud metadata endpoint in body"
+severity: critical
+target: BODY
+pattern: "(?i)169\\.254\\.169\\.254"
+action: BLOCK
+
+---
+id: SSRF-033
+description: "file:// protocol in body"
+severity: critical
+target: BODY
+pattern: "(?i)file://"
+action: BLOCK
+
+---
+id: SSRF-034
+description: "file:// protocol in ARGS"
+severity: critical
+target: ARGS
+pattern: "(?i)file://"
+action: BLOCK
+
+---
+id: SSRF-035
+description: "172.16-31.x.x internal address in body"
+severity: high
+target: BODY
+pattern: "(?i)(https?://|//)172\\.(1[6-9]|2[0-9]|3[01])\\.\\d{1,3}\\.\\d{1,3}"
+action: BLOCK
+
+---
+id: SSRF-036
+description: "GCP metadata service in body"
+severity: critical
+target: BODY
+pattern: "(?i)(metadata\\.google\\.internal|metadata\\.google\\.|/computeMetadata/)"
+action: BLOCK
+
+---
+id: SSRF-037
+description: "Decimal IP encoding bypass (args)"
+severity: high
+target: ARGS
+pattern: "(?i)(https?://|//)\\d{8,10}"
+action: BLOCK
+
+---
+id: SSRF-038
+description: "Decimal IP encoding bypass in body"
+severity: high
+target: BODY
+pattern: "(?i)(https?://|//)\\d{8,10}"
+action: BLOCK
+
+---
+id: SSRF-039
+description: "Octal IP encoding bypass"
+severity: high
+target: ARGS
+pattern: "(?i)(https?://|//)0[0-7]{1,3}\\.0[0-7]{0,3}\\.0[0-7]{0,3}\\.0[0-7]{0,3}"
+action: BLOCK
+
+---
+id: SSRF-040
+description: "Octal IP encoding bypass in body"
+severity: high
+target: BODY
+pattern: "(?i)(https?://|//)0[0-7]{1,3}\\.0[0-7]{0,3}\\.0[0-7]{0,3}\\.0[0-7]{0,3}"
+action: BLOCK
+
+---
+id: SSRF-041
+description: "Hex IP encoding bypass"
+severity: high
+target: ARGS
+pattern: "(?i)(https?://|//)0x[0-9a-f]{6,8}"
+action: BLOCK
+
+---
+id: SSRF-042
+description: "Hex IP encoding bypass in body"
+severity: high
+target: BODY
+pattern: "(?i)(https?://|//)0x[0-9a-f]{6,8}"
+action: BLOCK

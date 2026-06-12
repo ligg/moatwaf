@@ -1,0 +1,38 @@
+# CC Protection Rules
+# Rate limiting, connection limiting, and behavior-based attack detection
+
+rules:
+  - rule_id: CC-001
+    description: "IP QPS limit - 100 req/s"
+    severity: medium
+    phase: access
+    match:
+      targets: [IP]
+      operator: rate
+      limit: 100
+      window: 1
+    action: block
+    tags: [cc, rate-limit]
+
+  - rule_id: CC-002
+    description: "Concurrent connection limit - 50"
+    severity: medium
+    phase: access
+    match:
+      targets: [IP]
+      operator: conn
+      limit: 50
+    action: block
+    tags: [cc, conn-limit]
+
+  - rule_id: CC-003
+    description: "Path scanning detection - 20 404s in 60s"
+    severity: medium
+    phase: access
+    match:
+      targets: [IP]
+      operator: scan
+      threshold: 20
+      window: 60
+    action: block
+    tags: [cc, scan]

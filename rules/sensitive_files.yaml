@@ -1,0 +1,108 @@
+# Sensitive File Access Detection Rules
+# Blocks access to sensitive system files, configuration files, and application internals
+
+---
+id: SENS_001
+description: "Sensitive File - .git directory access"
+target: URI
+pattern: "(?i)(\\.git\\/|\\.git$)"
+action: block
+severity: high
+---
+id: SENS_002
+description: "Sensitive File - .svn directory access"
+target: URI
+pattern: "(?i)(\\.svn\\/|\\.svn$)"
+action: block
+severity: high
+---
+id: SENS_003
+description: "Sensitive File - .env file access"
+target: URI
+pattern: "(?i)(\\.env|\\.env\\.(production|staging|development|local))$"
+action: block
+severity: high
+---
+id: SENS_004
+description: "Sensitive File - .htaccess/.htpasswd"
+target: URI
+pattern: "(?i)\\.ht(access|passwd)$"
+action: block
+severity: high
+---
+id: SENS_005
+description: "Sensitive File - Configuration files"
+target: URI
+pattern: "(?i)(web\\.config|config\\.json|config\\.yml|config\\.yaml|settings\\.json|database\\.yml)$"
+action: block
+severity: high
+---
+id: SENS_006
+description: "Sensitive File - Package manager files"
+target: URI
+pattern: "(?i)(package\\.json|composer\\.json|Gemfile|requirements\\.txt|Pipfile|go\\.mod)$"
+action: block
+severity: medium
+---
+id: SENS_007
+description: "Sensitive File - Backup files"
+target: URI
+pattern: "(?i)(\\.bak|\\.old|\\.orig|\\.save|\\.swp|\\.swo|~)$"
+action: block
+severity: high
+---
+id: SENS_008
+description: "Sensitive File - Log files"
+target: URI
+pattern: "(?i)(\\.log$|\\/logs\\/|\\/log\\/)"
+action: block
+severity: high
+---
+id: SENS_009
+description: "Sensitive File - Debug/test endpoints"
+target: URI
+pattern: "(?i)(\\/debug\\/|\\/test\\/|\\/phpinfo|phpinfo\\.php)"
+action: block
+severity: high
+---
+id: SENS_010
+description: "Sensitive File - IDE project files"
+target: URI
+pattern: "(?i)(\\.idea\\/|\\.vscode\\/|\\.project|\\.classpath|nbproject)"
+action: block
+severity: medium
+---
+id: SENS_011
+description: "Sensitive File - Docker files"
+target: URI
+pattern: "(?i)(Dockerfile|docker-compose|\\.dockerignore)$"
+action: block
+severity: medium
+---
+id: SENS_012
+description: "Sensitive File - Private keys"
+target: URI
+pattern: "(?i)(\\.pem$|\\.key$|\\.p12$|\\.pfx$|id_rsa|id_dsa|id_ecdsa|id_ed25519)"
+action: block
+severity: critical
+---
+id: SENS_013
+description: "Sensitive File - Database files"
+target: URI
+pattern: "(?i)(\\.sqlite|\\.db$|\\.mdb$|\\.sql$)"
+action: block
+severity: high
+---
+id: SENS_014
+description: "Sensitive File - Source code files"
+target: URI
+pattern: "(?i)(\\.php$|\\.py$|\\.rb$|\\.pl$|\\.sh$|\\.bash$)"
+action: block
+severity: medium
+---
+id: SENS_015
+description: "Sensitive File - Crossdomain/cross-origin"
+target: URI
+pattern: "(?i)(crossdomain\\.xml|clientaccesspolicy\\.xml)$"
+action: block
+severity: medium

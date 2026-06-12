@@ -1,0 +1,108 @@
+# Command Injection Detection Rules
+# Matches OS command injection patterns in URI, ARGS, and BODY
+
+---
+id: CMD_001
+description: "Command Injection - Pipe operator"
+target: ARGS
+pattern: "(?i)(\\|\\||\\|)"
+action: block
+severity: critical
+---
+id: CMD_002
+description: "Command Injection - Pipe in URI"
+target: URI
+pattern: "(?i)(\\|\\||\\|)"
+action: block
+severity: critical
+---
+id: CMD_003
+description: "Command Injection - Semicolon command separator"
+target: ARGS
+pattern: "(?i);\\s*(ls|cat|echo|id|whoami|uname|wget|curl|nc|bash|sh|python|perl|ruby|php)"
+action: block
+severity: critical
+---
+id: CMD_004
+description: "Command Injection - Backtick execution"
+target: ARGS
+pattern: "(?i)`[^`]+`"
+action: block
+severity: critical
+---
+id: CMD_005
+description: "Command Injection - Backtick in URI"
+target: URI
+pattern: "(?i)`[^`]+`"
+action: block
+severity: critical
+---
+id: CMD_006
+description: "Command Injection - $() subshell execution"
+target: ARGS
+pattern: "(?i)\\$\\([^)]+\\)"
+action: block
+severity: critical
+---
+id: CMD_007
+description: "Command Injection - $() subshell in URI"
+target: URI
+pattern: "(?i)\\$\\([^)]+\\)"
+action: block
+severity: critical
+---
+id: CMD_008
+description: "Command Injection - Output redirection"
+target: ARGS
+pattern: "(?i)(>>|2>&1|\\d+>\\s*/dev/)"
+action: block
+severity: high
+---
+id: CMD_009
+description: "Command Injection - Common commands in ARGS"
+target: ARGS
+pattern: "(?i)\\b(wget|curl|nc|ncat|netcat|telnet|ssh|scp|ftp)\\b"
+action: block
+severity: high
+---
+id: CMD_010
+description: "Command Injection - Shell metacharacters"
+target: ARGS
+pattern: "(?i)(\\$\\{|\\$[A-Z])"
+action: block
+severity: high
+---
+id: CMD_011
+description: "Command Injection - /bin/sh or /bin/bash"
+target: ARGS
+pattern: "(?i)(\\/bin\\/(sh|bash|dash|ksh|zsh))"
+action: block
+severity: critical
+---
+id: CMD_012
+description: "Command Injection - cat /etc/passwd"
+target: ARGS
+pattern: "(?i)(cat\\s+\\/etc\\/passwd|cat\\s+\\/etc\\/shadow)"
+action: block
+severity: critical
+---
+id: CMD_013
+description: "Command Injection - python/perl/ruby one-liner"
+target: ARGS
+pattern: "(?i)(python|perl|ruby|php)\\s+-[eCE]"
+action: block
+severity: critical
+---
+id: CMD_014
+description: "Command Injection - echo with special characters"
+target: ARGS
+pattern: "(?i)echo\\s+.*[;&|`$]"
+action: block
+severity: high
+---
+id: CMD_015
+description: "Command Injection - /dev/tcp reverse shell"
+target: ARGS
+pattern: "(?i)\\/dev\\/tcp\\/"
+action: block
+severity: critical

