@@ -61,7 +61,7 @@ docker run -d --name moat-waf \
 ### Build from Source
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/ligg/moatwaf.git
 cd moat-waf
 docker build -t angelababa/moat-waf:latest .
 docker run -d --name moat-waf \
