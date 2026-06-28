@@ -24,9 +24,7 @@ types {
     application/javascript                js;
     application/atom+xml                  atom;
     application/json                      json;
-    application/xml                       xml;
     application/rss+xml                   rss;
-    application/atom+xml                  atom;
     application/mathml+xml                mml;
     application/mathml                    mml;
 
