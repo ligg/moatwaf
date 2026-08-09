@@ -920,10 +920,15 @@ end
 function _M.build_request()
     -- When body exceeds client_body_buffer_size, get_body_data() returns nil
     -- and the body is written to a temp file. Read it to avoid silently bypassing BODY rules.
-    local body_data = ngx.req.get_body_data()
+    -- NOTE: on HTTP/2 requests without a Content-Length header, get_body_data()
+    -- and get_body_file() raise a Lua error, which would turn every such request
+    -- into an HTTP 500. Guard both calls so those requests are evaluated without
+    -- a body instead of failing.
+    local ok, body_data = pcall(ngx.req.get_body_data)
+    if not ok then body_data = nil end
     if not body_data then
-        local body_file = ngx.req.get_body_file()
-        if body_file then
+        local fok, body_file = pcall(ngx.req.get_body_file)
+        if fok and body_file then
             local f = io.open(body_file, "r")
             if f then
                 body_data = f:read("*all") or ""

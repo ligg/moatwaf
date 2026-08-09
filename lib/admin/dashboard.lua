@@ -24,8 +24,12 @@ local function error_response(status, message)
 end
 
 local function read_json_body()
-    ngx.req.read_body()
-    local body = ngx.req.get_body_data()
+    local ok = pcall(ngx.req.read_body)
+    local body = nil
+    if ok then
+        local ok2, v = pcall(ngx.req.get_body_data)
+        if ok2 then body = v end
+    end
     if not body or body == "" then return nil end
     local ok, data = pcall(cjson.decode, body)
     if not ok then return nil end

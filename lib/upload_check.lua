@@ -5,6 +5,21 @@ local _M = {}
 
 local cjson = require "cjson"
 
+-- HTTP/2 requests without a Content-Length header make the ngx.req body APIs
+-- raise a Lua error ("http2 requests are not supported without content-length
+-- header"). These helpers turn that into nil so callers can degrade gracefully
+-- instead of failing the request with HTTP 500.
+local function safe_body_data()
+    local ok, v = pcall(ngx.req.get_body_data)
+    return ok and v or nil
+end
+
+local function safe_body_file()
+    local ok, v = pcall(ngx.req.get_body_file)
+    return ok and v or nil
+end
+
+
 ---------------------------------------------------------------------------
 -- Magic number definitions: hex_prefix -> MIME type
 ---------------------------------------------------------------------------
@@ -175,7 +190,7 @@ function _M.get_body_size()
         local n = tonumber(len)
         if n and n >= 0 then return n end
     end
-    local body_file = ngx.req.get_body_file()
+    local body_file = safe_body_file()
     if body_file then
         local f = io.open(body_file, "rb")
         if f then
@@ -185,7 +200,7 @@ function _M.get_body_size()
             return size
         end
     end
-    local body_data = ngx.req.get_body_data()
+    local body_data = safe_body_data()
     if body_data then
         return #body_data
     end
@@ -216,12 +231,12 @@ function _M.get_extension(filename)
 end
 
 -- Read first N bytes of request body for magic number detection
--- Uses ngx.req.read_body() + ngx.req.get_body_file() for large bodies
+-- Uses ngx.req.read_body() + safe_body_file() for large bodies
 function _M.read_body_prefix(max_bytes)
     max_bytes = max_bytes or 8  -- default 8 bytes for magic number check
 
     -- First try in-memory body data
-    local body_data = ngx.req.get_body_data()
+    local body_data = safe_body_data()
     if body_data then
         if #body_data >= max_bytes then
             return body_data:sub(1, max_bytes)
@@ -230,7 +245,7 @@ function _M.read_body_prefix(max_bytes)
     end
 
     -- Body written to temp file (large body)
-    local body_file = ngx.req.get_body_file()
+    local body_file = safe_body_file()
     if body_file then
         local f = io.open(body_file, "rb")
         if f then
@@ -246,7 +261,7 @@ end
 -- Read full request body (from memory or temp file)
 -- Returns body string or nil
 function _M.read_full_body()
-    local body_data = ngx.req.get_body_data()
+    local body_data = safe_body_data()
     if body_data then
         if #body_data > MAX_UPLOAD_SIZE then
             return nil, "file_too_large"
@@ -254,7 +269,7 @@ function _M.read_full_body()
         return body_data
     end
 
-    local body_file = ngx.req.get_body_file()
+    local body_file = safe_body_file()
     if body_file then
         local f = io.open(body_file, "rb")
         if f then
@@ -489,7 +504,7 @@ end
 -- the top-level Content-Disposition request header), so we read a small prefix
 -- only - safe even for very large uploads. Returns nil when not found.
 function _M.get_multipart_filename()
-    local body_file = ngx.req.get_body_file()
+    local body_file = safe_body_file()
     local data
     if body_file then
         local f = io.open(body_file, "rb")
@@ -498,7 +513,7 @@ function _M.get_multipart_filename()
             f:close()
         end
     else
-        data = ngx.req.get_body_data()
+        data = safe_body_data()
     end
     if not data then return nil end
     local fn = data:match('filename="([^"]+)"') or data:match("filename='([^']+)'")

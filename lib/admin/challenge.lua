@@ -33,8 +33,12 @@ function _M.generate_challenge(redirect_url)
 end
 
 function _M.handle_verify()
-    ngx.req.read_body()
-    local body = ngx.req.get_body_data()
+    local ok = pcall(ngx.req.read_body)
+    local body = nil
+    if ok then
+        local ok2, v = pcall(ngx.req.get_body_data)
+        if ok2 then body = v end
+    end
     if not body then
         ngx.status = 400
         ngx.header["Content-Type"] = "application/json"

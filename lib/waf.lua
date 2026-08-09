@@ -195,7 +195,8 @@ function _M.access_phase()
 
     -- Read request body so rule engine can inspect POST/PUT body content
     if method == "POST" or method == "PUT" or method == "PATCH" then
-        ngx.req.read_body()
+        -- Guarded: on HTTP/2 requests without Content-Length, read_body() raises.
+        pcall(ngx.req.read_body)
     end
 
     -- CC protection check
@@ -285,7 +286,8 @@ function _M.access_phase()
     local content_type = req_headers["content-type"] or req_headers["Content-Type"] or ""
     if content_type:find("multipart/form-data", 1, true) then
         -- Explicitly read request body so data is available for inspection
-        ngx.req.read_body()
+        -- (guarded for HTTP/2 requests without Content-Length)
+        pcall(ngx.req.read_body)
 
         local body_prefix = upload_check.read_body_prefix(8)
         local body_size = upload_check.get_body_size()
