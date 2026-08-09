@@ -12,15 +12,26 @@ WAF_MODE="${WAF_MODE:-block}"
 WAF_ADMIN_PATH="${WAF_ADMIN_PATH:-/admin/}"
 WAF_HEALTH_PATH="${WAF_HEALTH_PATH:-/waf-health}"
 
-# Replace backend server address in nginx.conf
-sed -i "s|server 127.0.0.1:80;|server ${WAF_BACKEND};|" /opt/moat/conf/nginx.conf
+# Substitute placeholders in nginx.conf when present.
+# NOTE: each sed -i is guarded so it only runs when the placeholder actually
+# exists. sed -i works by rename(2), which fails on bind-mounted config files
+# ("Resource busy"), so skipping it for configs without placeholders keeps the
+# container working when /opt/moat/conf/nginx.conf is bind-mounted from the host.
+if grep -q 'server 127.0.0.1:80;' /opt/moat/conf/nginx.conf; then
+    sed -i "s|server 127.0.0.1:80;|server ${WAF_BACKEND};|" /opt/moat/conf/nginx.conf
+fi
 
-# Replace max upload size in nginx.conf
-sed -i "s|\${WAF_MAX_UPLOAD_SIZE}|${WAF_MAX_UPLOAD_SIZE}|" /opt/moat/conf/nginx.conf
+if grep -q '\${WAF_MAX_UPLOAD_SIZE}' /opt/moat/conf/nginx.conf; then
+    sed -i "s|\${WAF_MAX_UPLOAD_SIZE}|${WAF_MAX_UPLOAD_SIZE}|" /opt/moat/conf/nginx.conf
+fi
 
-# Replace admin path and health path in nginx.conf
-sed -i "s|\${WAF_ADMIN_PATH}|${WAF_ADMIN_PATH}|g" /opt/moat/conf/nginx.conf
-sed -i "s|\${WAF_HEALTH_PATH}|${WAF_HEALTH_PATH}|g" /opt/moat/conf/nginx.conf
+if grep -q '\${WAF_ADMIN_PATH}' /opt/moat/conf/nginx.conf; then
+    sed -i "s|\${WAF_ADMIN_PATH}|${WAF_ADMIN_PATH}|g" /opt/moat/conf/nginx.conf
+fi
+
+if grep -q '\${WAF_HEALTH_PATH}' /opt/moat/conf/nginx.conf; then
+    sed -i "s|\${WAF_HEALTH_PATH}|${WAF_HEALTH_PATH}|g" /opt/moat/conf/nginx.conf
+fi
 
 # Update rules version to force cache reload on container start
 date +%s > /opt/moat/conf/rules/.version
