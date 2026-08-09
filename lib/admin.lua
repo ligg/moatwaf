@@ -19,6 +19,14 @@ if ADMIN_PATH:sub(-1) ~= "/" then ADMIN_PATH = ADMIN_PATH .. "/" end
 local PATH_DASHBOARD = ADMIN_PATH .. "dashboard"
 local PATH_DASHBOARD_SLASH = ADMIN_PATH .. "dashboard/"
 
+-- Escape ADMIN_PATH for use in Lua patterns. WAF_ADMIN_PATH is user
+-- configurable and may contain pattern magic chars (e.g. "-" in
+-- "/waf-mgmt-xxxx/"), which would otherwise break the sub-uri match.
+local function escape_pattern(s)
+    return (s:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%1"))
+end
+local ADMIN_PATH_PATTERN = escape_pattern(ADMIN_PATH)
+
 -- HTML templates (loaded from admin/html.lua)
 local LOGIN_HTML = admin_html.LOGIN_HTML
 local DASHBOARD_HTML = admin_html.DASHBOARD_HTML
@@ -151,7 +159,7 @@ function _M.handle()
     end
 
     -- Challenge verify endpoint (no auth required — it IS the auth gate)
-    local sub_uri = uri:match("^" .. ADMIN_PATH .. "(.+)$") or uri
+    local sub_uri = uri:match("^" .. ADMIN_PATH_PATTERN .. "(.+)$") or uri
     if sub_uri == "challenge/verify" and method == "POST" then
         local challenge = require("lib.admin.challenge")
         return challenge.handle_verify()
@@ -171,7 +179,7 @@ function _M.handle()
     logger.audit({ action = "admin", detail = method .. " " .. safe_uri, admin_ip = ngx.var.remote_addr })
 
     -- Sub-module delegation
-    local sub_uri = uri:match("^" .. ADMIN_PATH .. "(.+)$") or uri
+    local sub_uri = uri:match("^" .. ADMIN_PATH_PATTERN .. "(.+)$") or uri
     if admin_dashboard.handle(method, sub_uri) then return end
     if admin_logs.handle(method, sub_uri) then return end
     if admin_rules.handle(method, sub_uri) then return end
