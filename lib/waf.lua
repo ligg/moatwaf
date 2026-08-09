@@ -11,6 +11,51 @@ local upload_check = init.load("upload_check")
 local logger = init.load("logger")
 local cjson = require("cjson")
 
+-- Reject an upload with a 403. Used by access_phase().
+-- Deliberately independent of waf_mode: upload limits always apply.
+local function block_upload(rule_id, reason, message)
+    ngx.ctx.action = "block"
+    ngx.ctx.rule_id = rule_id
+    ngx.ctx.reason = reason
+    ngx.ctx.blocked = true
+
+    local stats = ngx.shared.waf_stats
+    if stats then
+        stats:incr("blocked_total", 1, 0)
+        stats:incr("blocked_upload", 1, 0)
+    end
+
+    ngx.status = 403
+    ngx.header["Content-Type"] = "application/json; charset=utf-8"
+    ngx.say(cjson.encode({
+        error = "Forbidden",
+        message = message,
+        code = 403
+    }))
+    return ngx.exit(403)
+end
+
+-- Check whether a request host matches the allowed host list.
+-- Entries support:
+--   * exact name:        "www.example.com"  (matches only that host)
+--   * base domain:       "example.com"      (matches example.com and *.example.com)
+--   * explicit wildcard: "*.example.com"    (matches subdomains only)
+-- Matching is case-insensitive.
+local function host_allowed(request_host, allowed_hosts)
+    if not request_host or request_host == "" then return false end
+    if allowed_hosts[request_host] then return true end
+    local lower_host = request_host:lower()
+    for entry in pairs(allowed_hosts) do
+        local domain = entry:gsub("^%*%.", ""):gsub("^%.", ""):lower()
+        if domain ~= "" then
+            if lower_host == domain then return true end
+            if lower_host:sub(-#domain - 1) == "." .. domain then return true end
+        end
+    end
+    return false
+end
+
+
 -- Per-request state uses ngx.ctx (safe across concurrent requests)
 
 -- CC protection auto-blacklist duration (coupled with Retry-After header)
@@ -45,14 +90,22 @@ function _M.rewrite_phase()
         return ngx.exit(400)
     end
 
-    -- Validate Host matches expected domains
-    local allowed_hosts = _M._allowed_hosts
+    -- Validate Host matches expected domains ($waf_allowed_hosts).
+    -- Supports exact names, base domains ("example.com" also matches *.example.com)
+    -- and explicit wildcards. The parsed list is cached per worker, keyed by the
+    -- configured string so different server blocks can use different allowlists.
+    local hosts_str = ngx.var.waf_allowed_hosts or ""
+    local cache_key = "hosts:" .. hosts_str
+    local cache = _M._allowed_hosts_cache or {}
+    local allowed_hosts = cache[cache_key]
     if not allowed_hosts then
         allowed_hosts = {}
-        local hosts_str = ngx.var.waf_allowed_hosts
-        if hosts_str and hosts_str ~= "" then
+        if hosts_str ~= "" then
             for h in hosts_str:gmatch("[^,]+") do
-                allowed_hosts[h:match("^%s*(.-)%s*$")] = true
+                local e = h:match("^%s*(.-)%s*$")
+                if e ~= "" then
+                    allowed_hosts[e:lower()] = true
+                end
             end
         else
             -- Fallback defaults (configure waf_allowed_hosts in production)
@@ -62,10 +115,11 @@ function _M.rewrite_phase()
                 ["admin.your-domain.com"] = true,
             }
         end
-        _M._allowed_hosts = allowed_hosts
+        cache[cache_key] = allowed_hosts
+        _M._allowed_hosts_cache = cache
     end
     local request_host = host:match("^%[.-%]") or host:match("^([^:]+)")
-    if request_host and not allowed_hosts[request_host] then
+    if request_host and not host_allowed(request_host, allowed_hosts) then
         ngx.status = 403
         ngx.say('{"error":"Forbidden","message":"Invalid Host header","code":403}')
         return ngx.exit(403)
@@ -226,70 +280,64 @@ function _M.access_phase()
     end
 
     -- Upload detection (in access_phase, before proxy_pass)
-    local content_type = ngx.req.get_headers()["Content-Type"] or ""
-    if content_type:find("multipart/form%-data", 1, true) then
+    -- Note: ngx.req.get_headers() lowercases header names.
+    local req_headers = ngx.req.get_headers()
+    local content_type = req_headers["content-type"] or req_headers["Content-Type"] or ""
+    if content_type:find("multipart/form-data", 1, true) then
         -- Explicitly read request body so data is available for inspection
         ngx.req.read_body()
 
         local body_prefix = upload_check.read_body_prefix(8)
-        local full_body, full_body_err = upload_check.read_full_body()
+        local body_size = upload_check.get_body_size()
 
-        if full_body_err == "file_too_large" then
-            ngx.ctx.action = "block"
-            ngx.ctx.rule_id = "UPLOAD-002"
-            ngx.ctx.reason = "UPLOAD-002: File size exceeds limit"
-            ngx.ctx.blocked = true
-
-            local stats = ngx.shared.waf_stats
-            if stats then
-                stats:incr("blocked_total", 1, 0)
-                stats:incr("blocked_upload", 1, 0)
-            end
-
-            ngx.status = 403
-            ngx.header["Content-Type"] = "application/json; charset=utf-8"
-            ngx.say(cjson.encode({
-                error = "Forbidden",
-                message = "File size exceeds upload limit",
-                code = 403
-            }))
-            return ngx.exit(403)
+        -- Hard limit: reject bodies above WAF_MAX_UPLOAD_SIZE without reading
+        -- the whole body into memory. Intentionally independent of waf_mode.
+        if body_size and body_size > upload_check.get_max_upload_size() then
+            return block_upload(
+                "UPLOAD-002",
+                "UPLOAD-002: File size exceeds limit",
+                "File size exceeds upload limit"
+            )
         end
 
-        if full_body then
-            -- Extract filename from Content-Disposition header
-            local filename = nil
-            local disposition = ngx.req.get_headers()["Content-Disposition"]
+        -- Extract filename from the first multipart part (inside the body).
+        -- Falls back to a top-level Content-Disposition header if present.
+        local filename = upload_check.get_multipart_filename()
+        if not filename then
+            local disposition = req_headers["content-disposition"] or req_headers["Content-Disposition"]
             if disposition then
                 filename = disposition:match('filename="?([^";]+)"?')
             end
-            if not filename then
-                filename = "unknown"
+        end
+        if not filename then
+            filename = "unknown"
+        end
+
+        local result
+        if body_size and body_size > upload_check.get_scan_limit() then
+            -- Large upload: light check only (extension + magic-number prefix),
+            -- skip reading the full body / full-content shell-code scan.
+            result = upload_check.check_light(filename, content_type, body_prefix)
+        else
+            local full_body, full_body_err = upload_check.read_full_body()
+            if full_body_err == "file_too_large" then
+                return block_upload(
+                    "UPLOAD-002",
+                    "UPLOAD-002: File size exceeds limit",
+                    "File size exceeds upload limit"
+                )
             end
-
-            local result = upload_check.check(filename, content_type, body_prefix, full_body)
-
-            if not result.allowed then
-                ngx.ctx.action = "block"
-                ngx.ctx.rule_id = result.reason and result.reason:match("(UPLOAD%-%d+)") or "UPLOAD-001"
-                ngx.ctx.reason = result.reason
-                ngx.ctx.blocked = true
-
-                local stats = ngx.shared.waf_stats
-                if stats then
-                    stats:incr("blocked_total", 1, 0)
-                    stats:incr("blocked_upload", 1, 0)
-                end
-
-                ngx.status = 403
-                ngx.header["Content-Type"] = "application/json; charset=utf-8"
-                ngx.say(cjson.encode({
-                    error = "Forbidden",
-                    message = result.reason or "File upload blocked by WAF",
-                    code = 403
-                }))
-                return ngx.exit(403)
+            if full_body then
+                result = upload_check.check(filename, content_type, body_prefix, full_body)
             end
+        end
+
+        if result and not result.allowed then
+            return block_upload(
+                result.reason and result.reason:match("(UPLOAD%-%d+)") or "UPLOAD-001",
+                result.reason,
+                result.reason or "File upload blocked by WAF"
+            )
         end
     end
 

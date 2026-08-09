@@ -59,5 +59,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 ENV WAF_BACKEND=127.0.0.1:80
 ENV WAF_ADMIN_PATH=/admin/
 ENV WAF_HEALTH_PATH=/waf-health
+ENV WAF_MAX_UPLOAD_SIZE=500m
+ENV WAF_UPLOAD_SCAN_LIMIT=20m
+ENV WAF_MODE=block
 
 ENTRYPOINT ["/docker-entrypoint.sh"]

@@ -139,17 +139,58 @@ function _M.parse_size(str)
     return math.floor(num)
 end
 
--- Get max upload size from WAF_MAX_UPLOAD_SIZE env var, default 10MB
+-- Get max upload size from WAF_MAX_UPLOAD_SIZE env var, default 500MB.
+-- Requests larger than this are rejected with UPLOAD-002 (independent of waf_mode).
 function _M.get_max_upload_size()
     local env_val = os.getenv("WAF_MAX_UPLOAD_SIZE")
     if env_val then
         local bytes = _M.parse_size(env_val)
         if bytes and bytes > 0 then return bytes end
     end
-    return 10 * 1024 * 1024
+    return 500 * 1024 * 1024
+end
+
+-- Full-content scan threshold (WAF_UPLOAD_SCAN_LIMIT, default 20MB).
+-- Bodies larger than this are only checked with check_light() (filename +
+-- magic-number prefix) instead of a full-content scan, so large uploads do
+-- not force the whole body into worker memory.
+function _M.get_scan_limit()
+    local env_val = os.getenv("WAF_UPLOAD_SCAN_LIMIT")
+    if env_val then
+        local bytes = _M.parse_size(env_val)
+        if bytes and bytes > 0 then return bytes end
+    end
+    return 20 * 1024 * 1024
 end
 
 local MAX_UPLOAD_SIZE = _M.get_max_upload_size()
+local SCAN_LIMIT = _M.get_scan_limit()
+
+-- Get the request body size in bytes WITHOUT reading the whole body into memory.
+-- Tries Content-Length first, then the spooled temp file size, then the
+-- in-memory body. Returns nil when the size cannot be determined.
+function _M.get_body_size()
+    local len = ngx.var.content_length
+    if len and len ~= "" then
+        local n = tonumber(len)
+        if n and n >= 0 then return n end
+    end
+    local body_file = ngx.req.get_body_file()
+    if body_file then
+        local f = io.open(body_file, "rb")
+        if f then
+            f:seek("end")
+            local size = f:tell()
+            f:close()
+            return size
+        end
+    end
+    local body_data = ngx.req.get_body_data()
+    if body_data then
+        return #body_data
+    end
+    return nil
+end
 
 ---------------------------------------------------------------------------
 -- Utility functions
@@ -348,7 +389,7 @@ function _M.check(filename, content_type, body_prefix, full_body)
     end
 
     ---------------------------------------------------------------
-    -- Check 2: File size (10 MB limit)
+    -- Check 2: File size (WAF_MAX_UPLOAD_SIZE limit)
     ---------------------------------------------------------------
     if full_body and #full_body > MAX_UPLOAD_SIZE then
         result.allowed = false
@@ -435,6 +476,86 @@ function _M.check(filename, content_type, body_prefix, full_body)
     ---------------------------------------------------------------
     if ext and not ALLOWED_EXTENSIONS[ext] and not DANGEROUS_EXTENSIONS[ext] then
         -- Unknown extension that isn't explicitly dangerous but also not allowed
+        result.allowed = false
+        result.reason = "UPLOAD-001: File extension not in allowed list: ." .. ext
+        return result
+    end
+
+    return result
+end
+
+-- Extract the filename of the first multipart part from the beginning of the
+-- request body. The filename lives in the part headers inside the body (not in
+-- the top-level Content-Disposition request header), so we read a small prefix
+-- only - safe even for very large uploads. Returns nil when not found.
+function _M.get_multipart_filename()
+    local body_file = ngx.req.get_body_file()
+    local data
+    if body_file then
+        local f = io.open(body_file, "rb")
+        if f then
+            data = f:read(8192)
+            f:close()
+        end
+    else
+        data = ngx.req.get_body_data()
+    end
+    if not data then return nil end
+    local fn = data:match('filename="([^"]+)"') or data:match("filename='([^']+)'")
+    if fn then
+        -- strip any client-supplied path components
+        return fn:gsub(".*[\\/]", "")
+    end
+    return nil
+end
+
+-- Light-weight check for large uploads (body size > WAF_UPLOAD_SCAN_LIMIT).
+-- Uses only the filename and the first bytes of the body:
+--   * dangerous-extension blocklist
+--   * magic-number executable detection
+--   * allowed-extension list
+-- It deliberately does NOT read the full body, so full-content checks
+-- (shell-code scan, content-type mismatch) are skipped for large files.
+-- Returns a result table compatible with check().
+function _M.check_light(filename, content_type, body_prefix)
+    local result = {
+        allowed = true,
+        reason = nil,
+        detected_type = nil,
+    }
+
+    local ext = _M.get_extension(filename)
+
+    -- Check 1: Dangerous extension blocklist
+    if filename and filename ~= "" then
+        local sanitized = filename:gsub("%z", ""):gsub("[%.%s]+$", "")
+        local basename_d = sanitized:match("([^/\\]+)$") or sanitized
+        for segment in basename_d:gmatch("%.([^.]+)") do
+            local seg_lower = segment:lower()
+            if DANGEROUS_EXTENSIONS[seg_lower] then
+                result.allowed = false
+                result.reason = "UPLOAD-001: Dangerous file extension blocked: ." .. seg_lower
+                return result
+            end
+        end
+    end
+
+    -- Check 2: Magic-number executable detection
+    if not body_prefix then
+        body_prefix = _M.read_body_prefix(8)
+    end
+    if body_prefix and #body_prefix >= 4 then
+        local detected = _M.detect_type(body_prefix)
+        result.detected_type = detected
+        if detected == "application/x-dosexec" or detected == "application/x-elf" then
+            result.allowed = false
+            result.reason = "UPLOAD-001: Executable file detected by magic number: " .. detected
+            return result
+        end
+    end
+
+    -- Check 3: Extension must be in allowed list (if extension present)
+    if ext and not ALLOWED_EXTENSIONS[ext] and not DANGEROUS_EXTENSIONS[ext] then
         result.allowed = false
         result.reason = "UPLOAD-001: File extension not in allowed list: ." .. ext
         return result

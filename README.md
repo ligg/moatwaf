@@ -49,7 +49,9 @@ docker run -d --name moat-waf \
 | `WAF_ADMIN_TOKEN` | 管理面板访问令牌（至少32字符） | 必填 |
 | `WAF_ADMIN_PATH` | 管理面板路径 | `/admin/` |
 | `WAF_HEALTH_PATH` | 健康检查路径 | `/waf-health` |
-| `WAF_MAX_UPLOAD_SIZE` | 最大上传文件大小 | `10m` |
+| `WAF_MAX_UPLOAD_SIZE` | 最大上传文件大小 | `500m` |
+| `WAF_UPLOAD_SCAN_LIMIT` | 全量内容扫描阈值，超过该大小的上传只做扩展名/魔数前缀检查 | `20m` |
+| `WAF_MODE` | 运行模式：`block`（拦截）或 `log_only`（仅记录） | `block` |
 | `WAF_LOG_DIR` | 日志目录 | `/opt/moat/logs` |
 
 ### 访问管理面板
@@ -57,6 +59,54 @@ docker run -d --name moat-waf \
 1. 浏览器打开 `http://your-server:8080/admin/`
 2. 输入 `WAF_ADMIN_TOKEN` 登录
 3. 在仪表盘查看实时数据、管理规则、查看日志
+
+> 管理面板支持在线编辑 nginx.conf（语法检查 + 热重载）与切换运行模式（block / log_only）。
+> 容器重建会丢失面板内修改，生产环境请用 `-v` 把 `/opt/moat/conf/nginx.conf` 挂载到宿主机持久化。
+
+### Host 白名单（waf_allowed_hosts）
+
+Moat WAF 会对每个请求的 `Host` 头做校验：不在白名单内的域名一律返回 403
+（用于防止 DNS rebinding / Host 头注入 / 其他域名解析到本机）。该校验与运行模式无关，永远生效。
+
+- 在 nginx 的每个 server 块中通过 `set $waf_allowed_hosts "example.com,foo.com";` 配置；
+- 支持 **后缀匹配**：`example.com` 会同时放行 `example.com` 与所有 `*.example.com` 子域名；
+  也支持显式通配 `*.example.com`（仅子域名）与精确域名 `www.example.com`；
+- 多个域名用英文逗号分隔，大小写不敏感。
+
+示例（反代多个域名时）：
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name *.example.com;
+    set $waf_allowed_hosts "example.com";   # 放行所有 *.example.com
+
+    location / {
+        rewrite_by_lua_block { local waf = require("lib.waf"); waf.rewrite_phase() }
+        access_by_lua_block  { local waf = require("lib.waf"); waf.access_phase() }
+        proxy_pass http://127.0.0.1:8080;
+    }
+}
+```
+
+### 上传检查（Upload Inspection）
+
+- `WAF_MAX_UPLOAD_SIZE` 是上传的硬性上限（默认 `500m`），超过直接返回 403（**不受 log_only 影响**）；
+  请同时把 nginx 的 `client_max_body_size` 调整到不小于该值；
+- 为防止大文件把整个 body 读入 worker 内存，超过 `WAF_UPLOAD_SCAN_LIMIT`（默认 `20m`）的
+  multipart 上传只做 **扩展名 + 魔数前缀** 检查（危险扩展名 / 可执行文件），跳过全量内容
+  （shell 代码）扫描；`20m` 以内的上传仍执行完整校验。
+
+### 安全响应头
+
+Moat WAF 作为反向代理位于任意应用之前，因此**默认不全局下发** CSP / HSTS / X-Frame-Options
+等严格安全头（可能破坏业务：内联脚本、CDN、iframe、子域 HSTS）。需要时请在各 server / location
+中按需添加：
+
+```nginx
+add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+add_header Content-Security-Policy "default-src 'self'" always;
+```
 
 ### Docker 构建
 

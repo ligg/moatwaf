@@ -49,7 +49,9 @@ docker run -d --name moat-waf \
 | `WAF_ADMIN_TOKEN` | Admin panel access token (min 32 chars) | Required |
 | `WAF_ADMIN_PATH` | Admin panel URL path | `/admin/` |
 | `WAF_HEALTH_PATH` | Health check endpoint path | `/waf-health` |
-| `WAF_MAX_UPLOAD_SIZE` | Maximum upload file size | `10m` |
+| `WAF_MAX_UPLOAD_SIZE` | Maximum upload file size | `500m` |
+| `WAF_UPLOAD_SCAN_LIMIT` | Full-content scan threshold; uploads larger than this only get extension + magic-number prefix checks | `20m` |
+| `WAF_MODE` | Run mode: `block` (reject) or `log_only` (record only) | `block` |
 | `WAF_LOG_DIR` | Log directory path | `/opt/moat/logs` |
 
 ### Access Admin Panel
@@ -57,6 +59,59 @@ docker run -d --name moat-waf \
 1. Open `http://your-server:8080/admin/` in browser
 2. Enter `WAF_ADMIN_TOKEN` to login
 3. View real-time stats, manage rules, and inspect logs from the dashboard
+
+> The panel can edit `nginx.conf` online (syntax check + hot reload) and switch the run mode
+> (block / log_only). Panel edits live inside the container and are lost on recreate; mount
+> `/opt/moat/conf/nginx.conf` to the host with `-v` in production.
+
+### Host Allowlist (waf_allowed_hosts)
+
+Every request's `Host` header is validated against an allowlist - hosts not listed get a 403
+(prevents DNS rebinding / Host-header injection / other domains pointed at your server).
+This check always applies, regardless of run mode.
+
+- Configure it per server block: `set $waf_allowed_hosts "example.com,foo.com";`
+- **Suffix matching** is supported: `example.com` allows `example.com` and every `*.example.com`
+  subdomain. Explicit wildcards (`*.example.com`, subdomains only) and exact names
+  (`www.example.com`) also work.
+- Separate multiple domains with commas; matching is case-insensitive.
+
+Example (reverse-proxying multiple domains):
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name *.example.com;
+    set $waf_allowed_hosts "example.com";   # allow all *.example.com
+
+    location / {
+        rewrite_by_lua_block { local waf = require("lib.waf"); waf.rewrite_phase() }
+        access_by_lua_block  { local waf = require("lib.waf"); waf.access_phase() }
+        proxy_pass http://127.0.0.1:8080;
+    }
+}
+```
+
+### Upload Inspection
+
+- `WAF_MAX_UPLOAD_SIZE` is the hard upload limit (default `500m`); larger requests are rejected
+  with 403 (**not bypassed by log_only**). Keep nginx `client_max_body_size` at least this large.
+- To avoid loading large bodies into worker memory, multipart uploads larger than
+  `WAF_UPLOAD_SCAN_LIMIT` (default `20m`) only get **extension + magic-number prefix** checks
+  (dangerous extensions / executables), skipping the full-content (shell-code) scan. Uploads
+  within `20m` still get the full validation.
+
+### Security Response Headers
+
+Moat WAF sits in front of arbitrary applications as a reverse proxy, so strict global headers
+(CSP / HSTS / X-Frame-Options) are **not applied by default** - they can break applications
+(inline scripts, CDN assets, iframes, subdomain-wide HSTS). Add them per server / location when
+needed:
+
+```nginx
+add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+add_header Content-Security-Policy "default-src 'self'" always;
+```
 
 ### Build from Source
 

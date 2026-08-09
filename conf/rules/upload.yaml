@@ -11,12 +11,12 @@ targets: [FILENAME]
 check: extension_blocklist
 ---
 id: UPLOAD-002
-description: "File size exceeds 10MB limit"
+description: "File size exceeds 500MB limit"
 severity: medium
 action: block
 targets: [BODY]
 check: size_limit
-limit: 10485760
+limit: 524288000
 ---
 id: UPLOAD-003
 description: "Content type mismatch - declared type does not match file content"
