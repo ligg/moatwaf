@@ -328,26 +328,24 @@ function _M.contains_shell_code(data)
         return false
     end
 
+    -- NOTE: patterns must be specific enough not to match ordinary file
+    -- content. Very generic substrings ("<%", "<script", "eval(", "system(")
+    -- appear in normal images/documents and caused false positives, so they
+    -- were removed. This scan only runs on files without a safe extension.
     local shell_patterns = {
-        { pattern = "<?php",              desc = "PHP tag" },
-        { pattern = "<%",                 desc = "ASP tag" },
-        { pattern = "<script",            desc = "Script tag" },
-        { pattern = "#!/bin/",            desc = "Shell shebang" },
-        { pattern = "#!/usr/bin/",        desc = "Shell shebang" },
-        { pattern = "import os",          desc = "Python import os" },
-        { pattern = "import subprocess",  desc = "Python subprocess" },
-        { pattern = "os.system(",         desc = "Python os.system" },
-        { pattern = "eval(",              desc = "eval() call" },
-        { pattern = "exec(",              desc = "exec() call" },
-        { pattern = "system(",            desc = "PHP system()" },
-        { pattern = "passthru(",          desc = "PHP passthru()" },
-        { pattern = "shell_exec(",        desc = "PHP shell_exec()" },
-        { pattern = "popen(",             desc = "PHP popen()" },
-        { pattern = "proc_open(",         desc = "PHP proc_open()" },
-        { pattern = "runtime.getruntime()", desc = "Java Runtime.exec" },
-        { pattern = "processbuilder",       desc = "Java ProcessBuilder" },
-        { pattern = "cfexecute",            desc = "CFML cfexecute" },
-        { pattern = "cfhttp",               desc = "CFML cfhttp" },
+        { pattern = "<?php",                  desc = "PHP tag" },
+        { pattern = "#!/bin/",                desc = "Shell shebang" },
+        { pattern = "#!/usr/bin/",            desc = "Shell shebang" },
+        { pattern = "import os",              desc = "Python import os" },
+        { pattern = "import subprocess",      desc = "Python subprocess" },
+        { pattern = "os.system(",             desc = "Python os.system" },
+        { pattern = "shell_exec(",            desc = "PHP shell_exec()" },
+        { pattern = "passthru(",              desc = "PHP passthru()" },
+        { pattern = "proc_open(",             desc = "PHP proc_open()" },
+        { pattern = "runtime.getruntime()",   desc = "Java Runtime.exec" },
+        { pattern = "processbuilder",         desc = "Java ProcessBuilder" },
+        { pattern = "cfexecute",              desc = "CFML cfexecute" },
+        { pattern = "cfhttp",                 desc = "CFML cfhttp" },
     }
 
     -- Check both raw data and null-byte-stripped data
@@ -472,17 +470,24 @@ function _M.check(filename, content_type, body_prefix, full_body)
 
     ---------------------------------------------------------------
     -- Check 5: Shell code detection
+    -- Only meaningful for files the web server could execute, i.e. files
+    -- WITHOUT a safe extension (or with no extension at all). Safe extensions
+    -- (images / documents / archives) cannot be executed by the server, and
+    -- their raw bytes frequently contain ASCII sequences that look like shell
+    -- markers (e.g. "<%", "eval(") - scanning them only produces false
+    -- positives on legitimate uploads.
     ---------------------------------------------------------------
-    if not full_body then
-        full_body = _M.read_full_body()
-    end
-
-    if full_body then
-        local has_shell, shell_desc = _M.contains_shell_code(full_body)
-        if has_shell then
-            result.allowed = false
-            result.reason = "UPLOAD-004: Shell code detected in file content: " .. (shell_desc or "unknown")
-            return result
+    if not (ext and ALLOWED_EXTENSIONS[ext]) then
+        if not full_body then
+            full_body = _M.read_full_body()
+        end
+        if full_body then
+            local has_shell, shell_desc = _M.contains_shell_code(full_body)
+            if has_shell then
+                result.allowed = false
+                result.reason = "UPLOAD-004: Shell code detected in file content: " .. (shell_desc or "unknown")
+                return result
+            end
         end
     end
 

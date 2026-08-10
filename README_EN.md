@@ -103,6 +103,10 @@ server {
 - Multipart upload requests are **excluded from BODY-target regex rules** (CMDI / SQLI / XSS,
   etc.): raw file bytes frequently trip these rules and cause false positives on legitimate
   uploads. Upload safety is handled by upload_check (extension / magic number / size) instead.
+- UPLOAD-004 **content shell-code scanning only runs on files without a safe extension**:
+  safe extensions (images / documents / archives) are never executed by the server, and their
+  raw bytes often contain sequences like `<%` or `eval(`, so scanning them only produces false
+  positives. Files with no / suspicious extension still get content-scanned as a fallback.
 
 ### Security Response Headers
 
