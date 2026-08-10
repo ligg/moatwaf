@@ -100,6 +100,9 @@ server {
   `WAF_UPLOAD_SCAN_LIMIT` (default `20m`) only get **extension + magic-number prefix** checks
   (dangerous extensions / executables), skipping the full-content (shell-code) scan. Uploads
   within `20m` still get the full validation.
+- Multipart upload requests are **excluded from BODY-target regex rules** (CMDI / SQLI / XSS,
+  etc.): raw file bytes frequently trip these rules and cause false positives on legitimate
+  uploads. Upload safety is handled by upload_check (extension / magic number / size) instead.
 
 ### Security Response Headers
 

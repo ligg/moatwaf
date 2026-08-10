@@ -924,28 +924,42 @@ function _M.build_request()
     -- and get_body_file() raise a Lua error, which would turn every such request
     -- into an HTTP 500. Guard both calls so those requests are evaluated without
     -- a body instead of failing.
-    local ok, body_data = pcall(ngx.req.get_body_data)
-    if not ok then body_data = nil end
-    if not body_data then
-        local fok, body_file = pcall(ngx.req.get_body_file)
-        if fok and body_file then
-            local f = io.open(body_file, "r")
-            if f then
-                body_data = f:read("*all") or ""
-                f:close()
+    --
+    -- multipart/form-data uploads are EXCLUDED from BODY rule matching: the raw
+    -- binary body (file bytes + boundaries) frequently trips BODY-target regex
+    -- rules (CMDI/SQLI/XSS) and produces false positives on legitimate uploads.
+    -- Upload safety is handled separately by upload_check (extension / magic
+    -- number / size), so BODY regex rules add little value here anyway.
+    local req_headers = ngx.req.get_headers()
+    local content_type = req_headers["content-type"] or req_headers["Content-Type"] or ""
+
+    local body_data = ""
+    if not content_type:find("multipart/form-data", 1, true) then
+        local ok, bd = pcall(ngx.req.get_body_data)
+        if not ok then bd = nil end
+        if bd then
+            body_data = bd
+        else
+            local fok, body_file = pcall(ngx.req.get_body_file)
+            if fok and body_file then
+                local f = io.open(body_file, "r")
+                if f then
+                    body_data = f:read("*all") or ""
+                    f:close()
+                end
             end
         end
     end
     -- Limit body size to prevent memory issues (max 1MB for rule matching)
-    if body_data and #body_data > 1048576 then
+    if #body_data > 1048576 then
         body_data = body_data:sub(1, 1048576)
     end
 
     return {
         URI = ngx.var.uri or "",
         ARGS = ngx.var.query_string or "",
-        BODY = body_data or "",
-        HEADERS = ngx.req.get_headers(),
+        BODY = body_data,
+        HEADERS = req_headers,
         COOKIE = ngx.var.http_cookie or "",
     }
 end

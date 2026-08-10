@@ -96,6 +96,8 @@ server {
 - 为防止大文件把整个 body 读入 worker 内存，超过 `WAF_UPLOAD_SCAN_LIMIT`（默认 `20m`）的
   multipart 上传只做 **扩展名 + 魔数前缀** 检查（危险扩展名 / 可执行文件），跳过全量内容
   （shell 代码）扫描；`20m` 以内的上传仍执行完整校验。
+- multipart 上传请求**不参与 BODY 类正则规则**（CMDI / SQLI / XSS 等）：文件二进制内容
+  极易命中这类规则造成误报，上传安全统一由上述 upload_check（扩展名 / 魔数 / 大小）负责。
 
 ### 安全响应头
 
