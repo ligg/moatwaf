@@ -70,6 +70,13 @@ local function make_mock_dict()
         return keys
     end
 
+    -- True reset of the underlying storage (rebinding dict._data would not
+    -- clear the upvalues the methods close over).
+    function dict:reset()
+        for k in pairs(data) do data[k] = nil end
+        for k in pairs(ttls) do ttls[k] = nil end
+    end
+
     dict._data = data
     dict._ttls = ttls
     return dict
@@ -94,6 +101,7 @@ local function setup_ngx_mock()
         ip_blacklist  = make_mock_dict(),
         session_track = make_mock_dict(),
         waf_stats     = make_mock_dict(),
+        waf_state     = make_mock_dict(),
     }
     ngx.ctx = {}
     ngx.var = {
@@ -101,6 +109,7 @@ local function setup_ngx_mock()
         uri            = "/test",
         http_user_agent = "Mozilla/5.0",
         http_host      = "example.com",
+        waf_allowed_hosts = "example.com",
     }
     ngx.req = {
         get_method  = function() return "GET" end,
@@ -160,6 +169,7 @@ local mock_upload_check = {
 
 local mock_utils = {
     get_client_ip = function() return "10.0.0.1" end,
+    detect_smuggling = function() return false end,
     ip_in_cidr = function(ip, cidr) return false end,
     url_decode = function(s) return s end,
     normalize = function(s) return s end,
@@ -212,8 +222,7 @@ describe("waf integration", function()
 
         -- Reset shared dicts
         for _, dict in pairs(ngx.shared) do
-            dict._data = {}
-            dict._ttls = {}
+            if dict.reset then dict:reset() end
         end
 
         -- Reset mocks to default pass behavior
@@ -282,8 +291,8 @@ describe("waf integration", function()
             assert.is_true(ngx.ctx.blocked)
             assert.equals("CC-001", ngx.ctx.rule_id)
             assert.equals(429, captured_exit)
-            -- Should have Retry-After header
-            assert.equals("300", ngx.header["Retry-After"])
+            -- Single exceedance: retry at the next window, no blacklist yet.
+            assert.equals("1", ngx.header["Retry-After"])
         end)
 
         it("should block request when rule engine triggers", function()
@@ -334,6 +343,27 @@ describe("waf integration", function()
             assert.is_true(conn_start_called)
             assert.is_true(ngx.ctx.conn_tracked)
         end)
+
+        it("should skip CC checks entirely in access_phase for whitelisted IPs", function()
+            local cc_check_called = false
+            mock_ip_control.check = function(ip, lists)
+                return "pass", "whitelisted"
+            end
+            mock_cc_protect.check = function(ip, method, uri)
+                cc_check_called = true
+                return "block", "rate_exceeded"
+            end
+
+            waf.rewrite_phase()
+            captured_say = {}
+            captured_exit = nil
+            ngx.header = {}
+
+            waf.access_phase()
+
+            assert.is_false(cc_check_called)
+            assert.is_nil(captured_exit)  -- not blocked by CC
+        end)
     end)
 
     describe("blocked request returns JSON error", function()
@@ -356,6 +386,10 @@ describe("waf integration", function()
             mock_cc_protect.check = function(ip, method, uri)
                 return "block", "rate_exceeded"
             end
+            local blacklist_called = false
+            mock_ip_control.blacklist_ip = function(ip, ttl)
+                blacklist_called = true
+            end
 
             waf.rewrite_phase()
             captured_say = {}
@@ -368,8 +402,36 @@ describe("waf integration", function()
             local resp = captured_say[#captured_say]
             assert.is_truthy(resp:find('"error"'))
             assert.is_truthy(resp:find("429"))
-            assert.equals("300", ngx.header["Retry-After"])
+            -- A single exceedance must NOT trigger the 5-minute blacklist;
+            -- the client can retry at the next window.
+            assert.is_false(blacklist_called)
+            assert.equals("1", ngx.header["Retry-After"])
             assert.equals("application/json; charset=utf-8", ngx.header["Content-Type"])
+        end)
+
+        it("repeated rate_exceeded strikes should blacklist with Retry-After 300", function()
+            mock_cc_protect.check = function(ip, method, uri)
+                return "block", "rate_exceeded"
+            end
+            local blacklisted_ip, blacklisted_ttl
+            mock_ip_control.blacklist_ip = function(ip, ttl)
+                blacklisted_ip, blacklisted_ttl = ip, ttl
+            end
+            -- Simulate 4 earlier strikes (one per second in real traffic);
+            -- the next exceedance is the 5th and must trigger the ban.
+            ngx.shared.rate_limit:set("strikes:10.0.0.1", 4, 300)
+
+            waf.rewrite_phase()
+            captured_say = {}
+            captured_exit = nil
+            ngx.header = {}
+
+            waf.access_phase()
+
+            assert.equals(429, captured_exit)
+            assert.equals("10.0.0.1", blacklisted_ip)
+            assert.equals(300, blacklisted_ttl)
+            assert.equals("300", ngx.header["Retry-After"])
         end)
 
         it("rule engine block should return 403 JSON without exposing rule_id", function()
@@ -386,10 +448,11 @@ describe("waf integration", function()
 
             assert.equals(403, captured_exit)
             local resp = captured_say[#captured_say]
-            -- Should NOT expose rule_id to the client
+            -- Should NOT expose rule_id or rule description to the client
+            -- (either would enable targeted rule evasion).
             assert.is_falsy(resp:find("SQLI-001"))
-            -- Should contain the description
-            assert.is_truthy(resp:find("SQL injection"))
+            assert.is_falsy(resp:find("SQL injection"))
+            assert.is_truthy(resp:find('"error"'))
         end)
     end)
 end)

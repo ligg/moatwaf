@@ -44,28 +44,44 @@ function _M.check_rate_limit(key, limit, window)
     local window_start = dict:get(start_key)
 
     if not window_start then
-        dict:set(start_key, now, window * 2)
-        dict:set(cur_key, 0, window * 2)
-        dict:set(prev_key, 0, window * 2)
-        window_start = now
+        -- add() is atomic: exactly one worker initializes each key, so a
+        -- racing worker can never zero out a counter that already collected
+        -- increments (set() would silently reset it).
+        dict:add(start_key, now, window * 2)
+        dict:add(prev_key, 0, window * 2)
+        dict:add(cur_key, 0, window * 2)
+        window_start = dict:get(start_key) or now
     end
 
     local elapsed = now - window_start
+    -- Workers cache ngx.now() independently; a slightly stale clock must not
+    -- produce a negative elapsed time (which would overweight the previous
+    -- window and falsely block requests).
+    if elapsed < 0 then
+        elapsed = 0
+    end
+
     if elapsed >= window then
         -- Atomic window transition: only one worker performs the reset.
         -- add(start_key+1) succeeds for exactly one worker; all others skip.
         local transition_key = start_key .. ":tr"
         local is_leader = dict:add(transition_key, 1, window)
-        if is_leader then
-            local snapshot = dict:get(cur_key) or 0
-            dict:set(prev_key, snapshot, window * 2)
-            -- Atomic drain: subtract snapshot from cur_key instead of zeroing.
-            -- Preserves any increments that arrived between get() and this line.
-            dict:incr(cur_key, -snapshot, 0, window * 2)
-            dict:set(start_key, now, window * 2)
-            dict:delete(transition_key)
+        if not is_leader then
+            -- Another worker is rotating the window right now and its reset
+            -- may not be visible yet. Counting against the stale counters
+            -- would double-count the previous window and falsely block a
+            -- legitimate request (which also triggers the 5-minute auto
+            -- blacklist), so let this request through uncounted.
+            return false, "pass"
         end
-        window_start = now
+        local snapshot = dict:get(cur_key) or 0
+        dict:set(prev_key, snapshot, window * 2)
+        -- set() rather than incr(): incr() does not refresh the TTL of an
+        -- existing key, so the counter would expire after 2*window even under
+        -- continuous traffic and the limiter would silently lose its history.
+        dict:set(cur_key, 0, window * 2)
+        dict:set(start_key, now, window * 2)
+        dict:delete(transition_key)
         elapsed = 0
     end
 
@@ -77,7 +93,7 @@ function _M.check_rate_limit(key, limit, window)
     local prev_count = dict:get(prev_key) or 0
     local rate = prev_count * (1 - elapsed / window) + new_val
 
-    if rate >= limit then
+    if rate > limit then
         return true, "rate_exceeded"
     end
 
@@ -145,24 +161,18 @@ function _M.check_conn_limit(ip, limit)
 end
 
 -- Check global QPS limit
--- Returns true if blocked
+-- Returns true if blocked.
+-- NOTE: this must be a *per-second* limit (QPS). The previous implementation
+-- incremented a single counter with a 60s TTL, which effectively allowed
+-- global_qps_limit requests per MINUTE (~83 req/s for 5000). Any site with
+-- more aggregate traffic than that had every remaining request in each
+-- window blocked with "global_exceeded" - i.e. all users rate limited.
 function _M.check_global_limit()
-    local dict = ngx.shared.rate_limit
-    if not dict then
-        return false, "no_dict"
-    end
-
-    local key = "global:qps"
-    local new_val, err = dict:incr(key, 1, 0, 60)
-    if not new_val then
-        return false, "incr_failed:" .. (err or "unknown")
-    end
-
-    if new_val > DEFAULTS.global_qps_limit then
+    local blocked, reason = _M.check_rate_limit("global:qps", DEFAULTS.global_qps_limit, 1)
+    if blocked then
         return true, "global_exceeded"
     end
-
-    return false, "pass"
+    return false, reason
 end
 
 -- Record a 404 response for path scan detection

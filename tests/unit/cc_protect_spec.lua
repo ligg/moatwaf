@@ -4,42 +4,58 @@
 
 package.path = "./?.lua;./lib/?.lua;" .. package.path
 
--- Mock shared dict with realistic behavior (TTL, incr with init)
+-- Virtual clock: busted runs outside nginx, so time is controlled by tests.
+local current_time = 1000000.0
+
+local function advance_time(seconds)
+    current_time = current_time + seconds
+end
+
+-- Mock shared dict faithful to OpenResty behavior:
+--   * incr(key, v, init, ttl): init/ttl apply ONLY when the key is created;
+--     incr never refreshes the TTL of an existing key.
+--   * add(key, v, ttl): fails when the key exists (and is not expired).
 local function make_mock_dict()
     local data = {}
     local ttls = {}
     local dict = {}
 
-    function dict:get(key)
-        if ttls[key] and os.time() > ttls[key] then
+    local function alive(key)
+        if ttls[key] and ttls[key] <= current_time then
             data[key] = nil
             ttls[key] = nil
-            return nil
+            return false
         end
+        return data[key] ~= nil
+    end
+
+    function dict:get(key)
+        if not alive(key) then return nil end
         return data[key]
     end
 
     function dict:set(key, value, ttl)
         data[key] = value
         if ttl then
-            ttls[key] = os.time() + ttl
+            ttls[key] = current_time + ttl
+        else
+            ttls[key] = nil
         end
         return true
     end
 
     function dict:incr(key, value, init, ttl)
-        if data[key] == nil then
+        if not alive(key) then
             if init ~= nil then
-                data[key] = init + value
+                data[key] = init
+                if ttl then
+                    ttls[key] = current_time + ttl
+                end
             else
                 return nil, "not found"
             end
-        else
-            data[key] = data[key] + value
         end
-        if ttl then
-            ttls[key] = os.time() + ttl
-        end
+        data[key] = data[key] + value
         return data[key], nil
     end
 
@@ -50,14 +66,21 @@ local function make_mock_dict()
     end
 
     function dict:add(key, value, ttl)
-        if data[key] ~= nil then
+        if alive(key) then
             return false, "exists"
         end
         data[key] = value
         if ttl then
-            ttls[key] = os.time() + ttl
+            ttls[key] = current_time + ttl
         end
         return true
+    end
+
+    -- True reset of the underlying storage (rebinding dict._data would not
+    -- clear the upvalues the methods close over).
+    function dict:reset()
+        for k in pairs(data) do data[k] = nil end
+        for k in pairs(ttls) do ttls[k] = nil end
     end
 
     dict._data = data
@@ -73,6 +96,7 @@ ngx.shared = {
 }
 ngx.var = { remote_addr = "127.0.0.1" }
 ngx.req = { get_headers = function() return {} end }
+ngx.now = function() return current_time end
 
 describe("cc_protect", function()
     local cc_protect
@@ -84,10 +108,8 @@ describe("cc_protect", function()
 
     before_each(function()
         -- Reset all shared dicts between tests
-        ngx.shared.rate_limit._data = {}
-        ngx.shared.rate_limit._ttls = {}
-        ngx.shared.session_track._data = {}
-        ngx.shared.session_track._ttls = {}
+        ngx.shared.rate_limit:reset()
+        ngx.shared.session_track:reset()
     end)
 
     describe("normal request passes", function()
@@ -174,6 +196,55 @@ describe("cc_protect", function()
             rl:set("global:qps", limit - 1)
             local action = cc_protect.check("10.0.0.6", "GET", "/")
             assert.equals("pass", action)
+        end)
+
+        it("should reset the global budget every second (per-second QPS)", function()
+            -- Regression: the old implementation counted requests in a 60s
+            -- window, so any site above ~83 req/s aggregate blocked ALL
+            -- users (global_exceeded) for the rest of each window.
+            local limit = cc_protect.DEFAULTS.global_qps_limit
+            for _ = 1, limit do
+                local blocked = cc_protect.check_global_limit()
+                assert.is_false(blocked)
+            end
+            local blocked, reason = cc_protect.check_global_limit()
+            assert.is_true(blocked)
+            assert.equals("global_exceeded", reason)
+
+            -- Advance past the 1s window so it rotates; the first request
+            -- still sees the full previous window (sliding weight ~1).
+            advance_time(2.0)
+            cc_protect.check_global_limit()
+
+            -- Half a second later the previous window has decayed to ~50%:
+            -- traffic under the cap must pass again. Under the old 60s bug
+            -- this stayed blocked for a full minute.
+            advance_time(0.5)
+            blocked = cc_protect.check_global_limit()
+            assert.is_false(blocked)
+        end)
+    end)
+
+    describe("rate limit window rotation", function()
+        it("should remember the previous window across rotations (TTL refresh)", function()
+            -- Regression: cur_key TTL must be refreshed on rotation, else
+            -- the counter expires after 2*window and history is lost.
+            local rl = ngx.shared.rate_limit
+            local limit = 10
+            for _ = 1, 3 do
+                assert.is_false(cc_protect.check_rate_limit("rot-ip", limit, 1))
+            end
+            advance_time(1.1)
+            for _ = 1, 3 do
+                assert.is_false(cc_protect.check_rate_limit("rot-ip", limit, 1))
+            end
+            advance_time(1.1)
+            for _ = 1, 7 do
+                assert.is_false(cc_protect.check_rate_limit("rot-ip", limit, 1))
+            end
+            -- prev window (3) + current (8) = 11 > 10
+            local blocked = cc_protect.check_rate_limit("rot-ip", limit, 1)
+            assert.is_true(blocked)
         end)
     end)
 

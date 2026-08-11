@@ -10,12 +10,15 @@ package.path = (script_path or "") .. "../../?.lua;" .. package.path
 
 -- Provide bit library shim for Lua 5.4+/5.5 (utils.lua uses LuaJIT's bit.band)
 if not bit then
-    bit = {}
-    function bit.band(a, b) return a & b end
-    function bit.bor(a, b) return a | b end
-    function bit.bxor(a, b) return a ~ b end
-    function bit.lshift(a, n) return a << n end
-    function bit.rshift(a, n) return a >> n end
+    bit = (load([[
+        local b = {}
+        function b.band(a, c) return a & c end
+        function b.bor(a, c) return a | c end
+        function b.bxor(a, c) return a ~ c end
+        function b.lshift(a, n) return a << n end
+        function b.rshift(a, n) return a >> n end
+        return b
+    ]]))()
 end
 
 ---------------------------------------------------------------------------

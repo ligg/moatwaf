@@ -60,6 +60,10 @@ end
 
 -- CC protection auto-blacklist duration (coupled with Retry-After header)
 local BLACKLIST_DURATION = 300  -- 5 minutes
+-- Rate-limit strikes required before auto-blacklisting. One strike is
+-- counted at most once per second per IP, so this means "exceeded the
+-- per-IP limit in 5 separate seconds within the last 5 minutes".
+local BLACKLIST_STRIKES = 5
 
 -- IP lists with TTL-based cache refresh.
 -- Each nginx worker has its own Lua VM, so ip_lists is per-worker.
@@ -150,6 +154,15 @@ function _M.rewrite_phase()
     ngx.ctx.reason = nil
     ngx.ctx.blocked = false
 
+    -- Expose the trusted client IP to nginx-level limit_req ($waf_client_ip).
+    -- Without this, limit_req keys on $binary_remote_addr, which is the
+    -- load-balancer node IP behind an ELB/CDN - throttling ALL users as one.
+    -- Guarded: custom nginx.conf files that do not declare the variable must
+    -- keep working.
+    if ngx.var.waf_client_ip ~= nil then
+        ngx.var.waf_client_ip = ip
+    end
+
     local lists = get_ip_lists()
 
     -- Check IP whitelist/blacklist
@@ -177,13 +190,17 @@ function _M.rewrite_phase()
         return ngx.exit(403)
     end
 
-    -- Track connection for CC protection (skip whitelisted IPs)
-    -- Mark conn_tracked so log_phase knows to call track_conn_end
-    if action == "pass" and reason == "whitelisted" then
-        ngx.ctx.conn_tracked = false
-    else
+    -- Whitelisted IPs bypass CC protection entirely (rate/conn/scan checks):
+    -- health checkers and internal clients must never be throttled by the WAF.
+    ngx.ctx.whitelisted = (action == "pass" and reason == "whitelisted")
+
+    -- Track connection for CC protection (skip whitelisted IPs).
+    -- Mark conn_tracked so log_phase knows to call track_conn_end.
+    if not ngx.ctx.whitelisted then
         cc_protect.track_conn_start(ip)
         ngx.ctx.conn_tracked = true
+    else
+        ngx.ctx.conn_tracked = false
     end
 end
 
@@ -200,7 +217,10 @@ function _M.access_phase()
     end
 
     -- CC protection check
-    local action, reason = cc_protect.check(ip, method, uri)
+    local action, reason = "pass", "ok"
+    if not ngx.ctx.whitelisted then
+        action, reason = cc_protect.check(ip, method, uri)
+    end
     if action == "challenge" then
         local challenge = require("lib.admin.challenge")
         if not challenge.has_valid_challenge() then
@@ -213,9 +233,23 @@ function _M.access_phase()
         ngx.ctx.reason = reason
         ngx.ctx.blocked = true
 
-        -- Auto-blacklist IPs with excessive hits
+        local blacklisted = false
+        -- Auto-blacklist persistent offenders only. A single rate_exceeded
+        -- (bursty page load, brief spike) is handled by the 429 below;
+        -- banning on the first strike turned brief legitimate bursts into
+        -- 5-minute outages for real users.
         if reason == "rate_exceeded" then
-            ip_control.blacklist_ip(ip, BLACKLIST_DURATION)
+            local rl = ngx.shared.rate_limit
+            if rl then
+                -- At most one strike per second per IP.
+                if rl:add("strike_guard:" .. ip, 1, 1) then
+                    local strikes = rl:incr("strikes:" .. ip, 1, 0, BLACKLIST_DURATION)
+                    if strikes and strikes >= BLACKLIST_STRIKES then
+                        ip_control.blacklist_ip(ip, BLACKLIST_DURATION)
+                        blacklisted = true
+                    end
+                end
+            end
         end
 
         local stats = ngx.shared.waf_stats
@@ -226,7 +260,9 @@ function _M.access_phase()
 
         ngx.status = 429
         ngx.header["Content-Type"] = "application/json; charset=utf-8"
-        ngx.header["Retry-After"] = tostring(BLACKLIST_DURATION)
+        -- Blacklisted clients must wait out the ban; everyone else can retry
+        -- as soon as the next rate-limit window.
+        ngx.header["Retry-After"] = blacklisted and tostring(BLACKLIST_DURATION) or "1"
         ngx.say(cjson.encode({
             error = "Too Many Requests",
             message = "Rate limit exceeded",
