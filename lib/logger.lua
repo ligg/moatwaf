@@ -146,6 +146,11 @@ end
 
 -- File-based log persistence
 local LOG_DIR = os.getenv("WAF_LOG_DIR") or "/opt/moat/logs"
+local MAX_FILE_LOG_ENTRIES = 10000
+
+local function shell_quote(value)
+    return "'" .. tostring(value or ""):gsub("'", "'\\''") .. "'"
+end
 
 -- Get log directory path
 function _M.get_log_dir()
@@ -160,7 +165,7 @@ function _M.write_log_entry_to_file(entry)
     local filepath = LOG_DIR .. "/waf_blocked_" .. date .. ".log"
 
     -- Ensure directory exists (ignore error if already exists)
-    os.execute('mkdir -p "' .. LOG_DIR .. '" 2>/dev/null')
+    os.execute("mkdir -p " .. shell_quote(LOG_DIR) .. " 2>/dev/null")
 
     local f = io.open(filepath, "a")
     if not f then
@@ -371,10 +376,16 @@ function _M.get_logs_from_files(filters, page, page_per_page)
                     local ok, entry = pcall(cjson.decode, line)
                     if ok and entry and matches_filters(entry, filters) then
                         table.insert(all_matching, entry)
+                        if #all_matching >= MAX_FILE_LOG_ENTRIES then
+                            break
+                        end
                     end
                 end
             end
             f:close()
+        end
+        if #all_matching >= MAX_FILE_LOG_ENTRIES then
+            break
         end
     end
 

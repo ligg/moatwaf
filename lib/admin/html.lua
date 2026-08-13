@@ -907,7 +907,7 @@ document.getElementById('retryBtn').style.display='none';
 document.getElementById('status').textContent='正在计算验证...';
 try{
 var answer=challenge.a+challenge.b;
-fetch('__SG_ADMIN__challenge/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answer:answer,token:challenge.token,redirect:challenge.redirect})})
+fetch('__SG_ADMIN__challenge/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({a:challenge.a,b:challenge.b,ts:challenge.ts,answer:answer,token:challenge.token,redirect:challenge.redirect})})
 .then(function(r){return r.json()})
 .then(function(d){
 if(d.ok){document.getElementById('status').textContent='验证通过，正在跳转...';window.location.href=d.redirect||'/';}

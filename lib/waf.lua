@@ -278,41 +278,48 @@ function _M.access_phase()
         ngx.ctx.rule_id = rule_id
         ngx.ctx.reason = description
 
-        -- Record stats by rule category (always, regardless of mode)
-        local stats = ngx.shared.waf_stats
-        if stats then
-            stats:incr("blocked_total", 1, 0)
-            if rule_id and rule_id:sub(1, 4) == "SQLI" then
-                stats:incr("blocked_sqli", 1, 0)
-            elseif rule_id and rule_id:sub(1, 3) == "XSS" then
-                stats:incr("blocked_xss", 1, 0)
-            elseif rule_id and rule_id:sub(1, 4) == "CMDI" then
-                stats:incr("blocked_cmdi", 1, 0)
-            else
-                stats:incr("blocked_other", 1, 0)
-            end
-        end
-
-        -- Check WAF mode: "block" (default) or "log_only"
-        local waf_mode = ngx.shared.waf_state:get("waf_mode") or "block"
-        if waf_mode == "log_only" then
-            -- Log-only mode: record but allow request through
-            ngx.ctx.blocked = false
-            ngx.log(ngx.WARN, "[WAF LOG-ONLY] rule=", rule_id,
+        if rule_action == "LOG" then
+            -- LOG rules record but never block, regardless of WAF mode.
+            ngx.log(ngx.WARN, "[WAF LOG] rule=", rule_id,
                 " severity=", severity, " src=", ngx.var.remote_addr,
                 " uri=", ngx.var.request_uri)
         else
-            -- Block mode: reject the request
-            ngx.ctx.blocked = true
-            ngx.status = 403
-            ngx.header["Content-Type"] = "application/json; charset=utf-8"
-            -- Do NOT expose rule_id to clients — it enables targeted rule evasion
-            ngx.say(cjson.encode({
-                error = "Forbidden",
-                message = "Request blocked by WAF",
-                code = 403
-            }))
-            return ngx.exit(403)
+            -- Record stats by rule category (always, regardless of mode)
+            local stats = ngx.shared.waf_stats
+            if stats then
+                stats:incr("blocked_total", 1, 0)
+                if rule_id and rule_id:sub(1, 4) == "SQLI" then
+                    stats:incr("blocked_sqli", 1, 0)
+                elseif rule_id and rule_id:sub(1, 3) == "XSS" then
+                    stats:incr("blocked_xss", 1, 0)
+                elseif rule_id and rule_id:sub(1, 4) == "CMDI" then
+                    stats:incr("blocked_cmdi", 1, 0)
+                else
+                    stats:incr("blocked_other", 1, 0)
+                end
+            end
+
+            -- Check WAF mode: "block" (default) or "log_only"
+            local waf_mode = ngx.shared.waf_state:get("waf_mode") or "block"
+            if waf_mode == "log_only" then
+                -- Log-only mode: record but allow request through
+                ngx.ctx.blocked = false
+                ngx.log(ngx.WARN, "[WAF LOG-ONLY] rule=", rule_id,
+                    " severity=", severity, " src=", ngx.var.remote_addr,
+                    " uri=", ngx.var.request_uri)
+            else
+                -- Block mode: reject the request
+                ngx.ctx.blocked = true
+                ngx.status = 403
+                ngx.header["Content-Type"] = "application/json; charset=utf-8"
+                -- Do NOT expose rule_id to clients — it enables targeted rule evasion
+                ngx.say(cjson.encode({
+                    error = "Forbidden",
+                    message = "Request blocked by WAF",
+                    code = 403
+                }))
+                return ngx.exit(403)
+            end
         end
     end
 
@@ -325,7 +332,6 @@ function _M.access_phase()
         -- (guarded for HTTP/2 requests without Content-Length)
         pcall(ngx.req.read_body)
 
-        local body_prefix = upload_check.read_body_prefix(8)
         local body_size = upload_check.get_body_size()
 
         -- Hard limit: reject bodies above WAF_MAX_UPLOAD_SIZE without reading
@@ -338,37 +344,9 @@ function _M.access_phase()
             )
         end
 
-        -- Extract filename from the first multipart part (inside the body).
-        -- Falls back to a top-level Content-Disposition header if present.
-        local filename = upload_check.get_multipart_filename()
-        if not filename then
-            local disposition = req_headers["content-disposition"] or req_headers["Content-Disposition"]
-            if disposition then
-                filename = disposition:match('filename="?([^";]+)"?')
-            end
-        end
-        if not filename then
-            filename = "unknown"
-        end
-
-        local result
-        if body_size and body_size > upload_check.get_scan_limit() then
-            -- Large upload: light check only (extension + magic-number prefix),
-            -- skip reading the full body / full-content shell-code scan.
-            result = upload_check.check_light(filename, content_type, body_prefix)
-        else
-            local full_body, full_body_err = upload_check.read_full_body()
-            if full_body_err == "file_too_large" then
-                return block_upload(
-                    "UPLOAD-002",
-                    "UPLOAD-002: File size exceeds limit",
-                    "File size exceeds upload limit"
-                )
-            end
-            if full_body then
-                result = upload_check.check(filename, content_type, body_prefix, full_body)
-            end
-        end
+        -- Stream through every multipart part and validate each file without
+        -- loading the whole request body into memory.
+        local result = upload_check.check_multipart(content_type)
 
         if result and not result.allowed then
             return block_upload(
@@ -401,6 +379,12 @@ function _M.log_phase()
     -- Decrement connection count only if we tracked the start
     if ngx.ctx.conn_tracked then
         cc_protect.track_conn_end(ip)
+    end
+
+    -- Record backend 404s for path-scan detection. WAF-blocked requests are
+    -- not backend 404s and should not contribute to scan counters.
+    if not ngx.ctx.whitelisted and tostring(ngx.var.status) == "404" then
+        cc_protect.record_404(ip)
     end
 
     -- If blocked, log the event via ngx.log (non-blocking, writes to error log)

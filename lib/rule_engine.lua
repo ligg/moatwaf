@@ -932,6 +932,7 @@ function _M.build_request()
     -- number / size), so BODY regex rules add little value here anyway.
     local req_headers = ngx.req.get_headers()
     local content_type = req_headers["content-type"] or req_headers["Content-Type"] or ""
+    local method = ngx.req.get_method()
 
     local body_data = ""
     if not content_type:find("multipart/form-data", 1, true) then
@@ -955,9 +956,34 @@ function _M.build_request()
         body_data = body_data:sub(1, 1048576)
     end
 
+    -- Build the ARGS target from the query string plus URL-encoded form
+    -- parameters. Previously ARGS only contained the query string, so
+    -- SQLi/XSS/CMDI rules targeting ARGS missed POST form parameters.
+    local args_parts = {}
+    local query_string = ngx.var.query_string or ""
+    if query_string ~= "" then
+        args_parts[#args_parts + 1] = query_string
+    end
+
+    if (method == "POST" or method == "PUT" or method == "PATCH")
+        and not content_type:find("multipart/form-data", 1, true) then
+        local ok, post_args = pcall(ngx.req.get_post_args)
+        if ok and post_args then
+            for key, value in pairs(post_args) do
+                if type(value) == "table" then
+                    for _, item in ipairs(value) do
+                        args_parts[#args_parts + 1] = tostring(key) .. "=" .. tostring(item)
+                    end
+                else
+                    args_parts[#args_parts + 1] = tostring(key) .. "=" .. tostring(value)
+                end
+            end
+        end
+    end
+
     return {
         URI = ngx.var.uri or "",
-        ARGS = ngx.var.query_string or "",
+        ARGS = table.concat(args_parts, "&"),
         BODY = body_data,
         HEADERS = req_headers,
         COOKIE = ngx.var.http_cookie or "",

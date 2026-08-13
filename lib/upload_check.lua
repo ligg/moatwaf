@@ -566,6 +566,156 @@ function _M.get_multipart_filename()
     return nil
 end
 
+-- Parse the multipart boundary from a Content-Type header value.
+-- Supports both quoted and unquoted boundary parameters.
+function _M.get_multipart_boundary(content_type)
+    if not content_type then return nil end
+    local boundary = content_type:match("boundary%s*=%s*\"([^\"]+)\"") or content_type:match("boundary%s*=%s*'([^']+)'") or content_type:match("boundary%s*=%s*([^;%s]+)")
+    if boundary and boundary ~= "" then
+        return boundary
+    end
+    return nil
+end
+
+-- Extract filename from a Content-Disposition header value/table.
+function _M.extract_filename(disposition)
+    if type(disposition) == "table" then
+        disposition = disposition["content-disposition"] or disposition["Content-Disposition"]
+    end
+    if not disposition or type(disposition) ~= "string" then return nil end
+
+    local filename = disposition:match('filename="([^"]*)"') or disposition:match("filename='([^']*)'")
+    if not filename or filename == "" then
+        filename = disposition:match('filename=([^;]+)')
+    end
+    if not filename or filename == "" then return nil end
+
+    -- Strip any client-supplied path components.
+    filename = filename:gsub(".*[\\/]", "")
+    return filename
+end
+
+-- Try to load OpenResty's streaming multipart parser. It is built into
+-- OpenResty, but may be unavailable in plain Lua unit tests.
+local function get_streaming_upload()
+    local ok, upload = pcall(require, "resty.upload")
+    if ok and upload then return upload end
+    return nil
+end
+
+-- Fallback for environments without resty.upload: validate only the first
+-- file using the legacy prefix/full-body path.
+local function check_multipart_fallback(content_type)
+    local filename = _M.get_multipart_filename()
+    local body_prefix = _M.read_body_prefix(8)
+    local body_size = _M.get_body_size()
+
+    if body_size and body_size > MAX_UPLOAD_SIZE then
+        return {
+            allowed = false,
+            reason = string.format(
+                "UPLOAD-002: File size exceeds limit (%d MB max, got %d bytes)",
+                MAX_UPLOAD_SIZE / (1024 * 1024), body_size
+            )
+        }
+    end
+
+    if body_size and body_size > SCAN_LIMIT then
+        return _M.check_light(filename, content_type, body_prefix)
+    end
+
+    local full_body, err = _M.read_full_body()
+    if err == "file_too_large" then
+        return {
+            allowed = false,
+            reason = string.format(
+                "UPLOAD-002: File size exceeds limit (%d MB max)",
+                MAX_UPLOAD_SIZE / (1024 * 1024)
+            )
+        }
+    end
+
+    return _M.check(filename, content_type, body_prefix, full_body)
+end
+
+-- Validate a multipart/form-data upload by iterating over every file part
+-- with the streaming resty.upload parser. Large parts are only checked with
+-- check_light() so the full file is never loaded into memory.
+-- Returns { allowed = bool, reason = string|nil }.
+function _M.check_multipart(content_type)
+    local boundary = _M.get_multipart_boundary(content_type)
+    if not boundary then
+        -- Not parseable as multipart; fall back to the legacy single-file path.
+        return check_multipart_fallback(content_type)
+    end
+
+    local upload = get_streaming_upload()
+    if not upload then
+        return check_multipart_fallback(content_type)
+    end
+
+    local form, err = upload:new(8192)
+    if not form then
+        return { allowed = false, reason = "UPLOAD-005: Failed to initialize multipart parser: " .. (err or "unknown") }
+    end
+
+    local headers
+    local part_chunks = {}
+    local part_body_len = 0
+    local part_size = 0
+
+    while true do
+        local typ, res, rerr = form:read()
+        if not typ then
+            if rerr and rerr ~= "closed" then
+                return { allowed = false, reason = "UPLOAD-005: Multipart parse error: " .. tostring(rerr) }
+            end
+            break
+        end
+
+        if typ == "header" then
+            headers = res
+        elseif typ == "body" then
+            part_size = part_size + #res
+            -- Keep only enough bytes for magic-number and, for small files,
+            -- shell-code scanning. The rest is discarded, so memory stays bounded.
+            if part_body_len < SCAN_LIMIT then
+                local want = SCAN_LIMIT - part_body_len
+                local chunk = res:sub(1, want)
+                part_chunks[#part_chunks + 1] = chunk
+                part_body_len = part_body_len + #chunk
+            end
+        elseif typ == "part_end" then
+            if headers then
+                local filename = _M.extract_filename(headers)
+                local part_content_type = headers["content-type"] or headers["Content-Type"] or ""
+                local body = table.concat(part_chunks)
+                local body_prefix = (#body >= 8) and body:sub(1, 8) or body
+
+                local result
+                if part_size <= SCAN_LIMIT then
+                    result = _M.check(filename, part_content_type, body_prefix, body)
+                else
+                    result = _M.check_light(filename, part_content_type, body_prefix)
+                end
+
+                if result and not result.allowed then
+                    return result
+                end
+            end
+
+            headers = nil
+            part_chunks = {}
+            part_body_len = 0
+            part_size = 0
+        elseif typ == "eof" then
+            break
+        end
+    end
+
+    return { allowed = true }
+end
+
 -- Light-weight check for large uploads (body size > WAF_UPLOAD_SCAN_LIMIT).
 -- Uses only the filename and the first bytes of the body:
 --   * dangerous-extension blocklist

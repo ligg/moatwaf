@@ -68,12 +68,38 @@ function _M.normalize(str)
 end
 
 -- Get client IP (trust X-Forwarded-For from upstream WAF only)
-local trusted_proxies = {
+local DEFAULT_TRUSTED_PROXIES = {
     ["127.0.0.1"] = true,
     ["10.0.0.0/8"] = true,
     ["172.16.0.0/12"] = true,
     ["192.168.0.0/16"] = true,
 }
+
+local trusted_proxies_cache = nil
+
+-- Resolve trusted proxy addresses from defaults plus WAF_TRUSTED_PROXIES
+-- (comma-separated IPv4/IPv6 addresses or CIDR ranges).
+function _M.get_trusted_proxies()
+    if trusted_proxies_cache then
+        return trusted_proxies_cache
+    end
+
+    local proxies = {}
+    for key, _ in pairs(DEFAULT_TRUSTED_PROXIES) do
+        proxies[key] = true
+    end
+
+    local env_val = os.getenv("WAF_TRUSTED_PROXIES") or ""
+    for entry in env_val:gmatch("[^,]+") do
+        local trimmed = entry:match("^%s*(.-)%s*$")
+        if trimmed ~= "" then
+            proxies[trimmed] = true
+        end
+    end
+
+    trusted_proxies_cache = proxies
+    return proxies
+end
 
 -- Validate IPv4 address format (each octet 0-255)
 local function is_valid_ipv4(ip)
@@ -111,7 +137,8 @@ local function is_valid_ip(ip)
 end
 
 local function is_trusted_ip(ip)
-    for proxy, _ in pairs(trusted_proxies) do
+    local proxies = _M.get_trusted_proxies()
+    for proxy, _ in pairs(proxies) do
         if proxy:find("/") then
             if _M.ip_in_cidr(ip, proxy) then
                 return true

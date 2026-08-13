@@ -17,6 +17,7 @@ COPY conf/mime.types /opt/moat/conf/mime.types
 
 # Copy WAF rule files
 COPY conf/rules/ /opt/moat/conf/rules/
+COPY rules/ /opt/moat/rules/
 
 # Copy IP control lists
 COPY conf/ip_blacklist.txt /opt/moat/conf/ip_blacklist.txt
