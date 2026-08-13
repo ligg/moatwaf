@@ -127,7 +127,7 @@ local function handle_cc_config_post()
     }
 
     -- Boolean config keys (no numeric validation)
-    local bool_keys = { challenge_enabled = true, use_sliding_window = true }
+    local bool_keys = { challenge_enabled = true }
 
     for key, value in pairs(body) do
         if not valid_keys[key] then

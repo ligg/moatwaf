@@ -6,12 +6,40 @@ local DEFAULTS = {
     ip_qps_limit = 100,          -- requests per second per IP
     ip_conn_limit = 50,           -- concurrent connections per IP
     global_qps_limit = 5000,      -- global QPS limit
-    window_size = 60,             -- fixed window in seconds
+    window_size = 60,             -- path-scan/generic window; QPS checks stay per-second
     challenge_enabled = false,    -- JS Challenge mode
-    use_sliding_window = false,   -- sliding window algorithm
 }
 
 _M.DEFAULTS = DEFAULTS
+
+-- Resolve effective CC configuration.
+--
+-- Runtime overrides are stored in ngx.shared.session_track under
+-- "cc_config:<key>" by the admin API. Each key falls back to DEFAULTS when
+-- no override is present, so direct library users without a session_track
+-- dict keep the documented defaults.
+function _M.get_config()
+    local cfg = {}
+    for key, value in pairs(DEFAULTS) do
+        cfg[key] = value
+    end
+
+    local dict
+    if ngx ~= nil and ngx.shared ~= nil then
+        dict = ngx.shared.session_track
+    end
+
+    if dict then
+        for key in pairs(DEFAULTS) do
+            local stored = dict:get("cc_config:" .. key)
+            if stored ~= nil then
+                cfg[key] = stored
+            end
+        end
+    end
+
+    return cfg
+end
 
 -- Generate rate limit key from IP, HTTP method, and URI
 function _M.make_key(ip, method, uri)
@@ -34,7 +62,7 @@ function _M.check_rate_limit(key, limit, window)
         return false, "no_dict"
     end
 
-    window = window or DEFAULTS.window_size
+    window = window or _M.get_config().window_size
     local now = ngx.now()
 
     local cur_key = key
@@ -146,7 +174,7 @@ function _M.check_conn_limit(ip, limit)
         return false, "no_dict"
     end
 
-    limit = limit or DEFAULTS.ip_conn_limit
+    limit = limit or _M.get_config().ip_conn_limit
     local key = "conn:" .. ip
     local count, err = dict:get(key)
     if not count then
@@ -167,8 +195,9 @@ end
 -- global_qps_limit requests per MINUTE (~83 req/s for 5000). Any site with
 -- more aggregate traffic than that had every remaining request in each
 -- window blocked with "global_exceeded" - i.e. all users rate limited.
-function _M.check_global_limit()
-    local blocked, reason = _M.check_rate_limit("global:qps", DEFAULTS.global_qps_limit, 1)
+function _M.check_global_limit(limit)
+    limit = limit or _M.get_config().global_qps_limit
+    local blocked, reason = _M.check_rate_limit("global:qps", limit, 1)
     if blocked then
         return true, "global_exceeded"
     end
@@ -183,7 +212,7 @@ function _M.record_404(ip)
     end
 
     local key = "scan:" .. ip
-    local new_val, err = dict:incr(key, 1, 0, DEFAULTS.window_size)
+    local new_val, err = dict:incr(key, 1, 0, _M.get_config().window_size)
     if not new_val then
         return false, "incr_failed:" .. (err or "unknown")
     end
@@ -216,38 +245,31 @@ end
 -- Evaluates: global limit -> per-IP QPS -> per-IP connections -> path scan -> pass
 -- Returns: "pass" | "block" | "challenge", reason
 function _M.check(ip, method, uri)
-    -- Read challenge config from shared dict
-    local challenge_enabled = false
-    local dict = ngx.shared.session_track
-    if dict then
-        local ce = dict:get("cc_config:challenge_enabled")
-        if ce ~= nil then challenge_enabled = ce
-        else challenge_enabled = DEFAULTS.challenge_enabled or false end
-    end
+    local cfg = _M.get_config()
 
     -- 1. Global QPS limit
-    local blocked, reason = _M.check_global_limit()
+    local blocked, reason = _M.check_global_limit(cfg.global_qps_limit)
     if blocked then
-        return challenge_enabled and "challenge" or "block", reason
+        return cfg.challenge_enabled and "challenge" or "block", reason
     end
 
     -- 2. Per-IP QPS limit
     local key = ip or "unknown"
-    blocked, reason = _M.check_rate_limit(key, DEFAULTS.ip_qps_limit, 1)
+    blocked, reason = _M.check_rate_limit(key, cfg.ip_qps_limit, 1)
     if blocked then
-        return challenge_enabled and "challenge" or "block", reason
+        return cfg.challenge_enabled and "challenge" or "block", reason
     end
 
     -- 3. Per-IP connection limit
-    blocked, reason = _M.check_conn_limit(ip)
+    blocked, reason = _M.check_conn_limit(ip, cfg.ip_conn_limit)
     if blocked then
-        return challenge_enabled and "challenge" or "block", reason
+        return cfg.challenge_enabled and "challenge" or "block", reason
     end
 
     -- 4. Path scan detection
     blocked, reason = _M.check_path_scan(ip)
     if blocked then
-        return challenge_enabled and "challenge" or "block", reason
+        return cfg.challenge_enabled and "challenge" or "block", reason
     end
 
     return "pass", "ok"

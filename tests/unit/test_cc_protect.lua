@@ -363,6 +363,62 @@ local function test_check()
     print("ALL check tests PASSED")
 end
 
+-- Test: runtime CC config overrides stored in session_track are honored.
+-- Regression: ip_qps_limit/ip_conn_limit/global_qps_limit/challenge_enabled
+-- used to read only the hard-coded DEFAULTS table, so admin config changes
+-- had no effect on the actual check.
+local function test_cc_config_override()
+    local cc = require("lib.cc_protect")
+
+    local function reset_dicts()
+        ngx.shared.rate_limit = make_mock_dict(function() return virtual_now end)
+        ngx.shared.session_track = make_mock_dict(function() return virtual_now end)
+    end
+
+    -- Per-IP QPS override.
+    reset_dicts()
+    virtual_now = 3000000.0
+    ngx.shared.session_track:set("cc_config:ip_qps_limit", 3)
+    ngx.shared.session_track:set("cc_config:global_qps_limit", 100000)
+
+    local action, reason
+    for i = 1, 3 do
+        action, reason = cc.check("10.0.1.1", "GET", "/")
+        assert(action == "pass", "request " .. i .. " should pass under override")
+    end
+    action, reason = cc.check("10.0.1.1", "GET", "/")
+    assert(action == "block", "4th request should be blocked by overridden ip_qps_limit")
+    assert(reason == "rate_exceeded", "reason should be 'rate_exceeded'")
+
+    -- challenge_enabled override turns block into challenge.
+    reset_dicts()
+    virtual_now = 3100000.0
+    ngx.shared.session_track:set("cc_config:ip_qps_limit", 1)
+    ngx.shared.session_track:set("cc_config:global_qps_limit", 100000)
+    ngx.shared.session_track:set("cc_config:challenge_enabled", true)
+
+    action, reason = cc.check("10.0.1.2", "GET", "/")
+    assert(action == "pass", "first request should pass")
+    action, reason = cc.check("10.0.1.2", "GET", "/")
+    assert(action == "challenge", "over-limit request should challenge when enabled")
+    assert(reason == "rate_exceeded", "reason should still be 'rate_exceeded'")
+
+    -- window_size override applies to path-scan tracking TTL.
+    reset_dicts()
+    virtual_now = 3200000.0
+    ngx.shared.session_track:set("cc_config:window_size", 1)
+
+    local ok = cc.record_404("10.0.1.3")
+    assert(ok == true, "record_404 should succeed")
+    assert(ngx.shared.session_track:get("scan:10.0.1.3") == 1, "scan key should exist")
+
+    virtual_now = virtual_now + 2
+    assert(ngx.shared.session_track:get("scan:10.0.1.3") == nil,
+        "scan key should expire after overridden window_size")
+
+    print("ALL cc_config_override tests PASSED")
+end
+
 -- Test: TTL expiry in mock incr
 local function test_ttl_expiry()
     local mock_dict = make_mock_dict()
@@ -394,6 +450,7 @@ test_global_limit_per_second()
 test_conn_tracking()
 test_path_scan()
 test_check()
+test_cc_config_override()
 test_ttl_expiry()
 
 print("\n=== ALL CC PROTECT TESTS PASSED ===")

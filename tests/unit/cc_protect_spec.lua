@@ -302,4 +302,49 @@ describe("cc_protect", function()
             assert.equals("path_scan_detected", reason)
         end)
     end)
+
+    describe("runtime config overrides", function()
+        it("should honor ip_qps_limit override from shared dict", function()
+            ngx.shared.session_track:set("cc_config:ip_qps_limit", 3)
+            ngx.shared.session_track:set("cc_config:global_qps_limit", 100000)
+
+            for i = 1, 3 do
+                assert.equals("pass", (cc_protect.check("10.0.1.1", "GET", "/")))
+            end
+
+            local action, reason = cc_protect.check("10.0.1.1", "GET", "/")
+            assert.equals("block", action)
+            assert.equals("rate_exceeded", reason)
+        end)
+
+        it("should honor challenge_enabled override", function()
+            ngx.shared.session_track:set("cc_config:ip_qps_limit", 1)
+            ngx.shared.session_track:set("cc_config:global_qps_limit", 100000)
+            ngx.shared.session_track:set("cc_config:challenge_enabled", true)
+
+            assert.equals("pass", (cc_protect.check("10.0.1.2", "GET", "/")))
+            local action, reason = cc_protect.check("10.0.1.2", "GET", "/")
+            assert.equals("challenge", action)
+            assert.equals("rate_exceeded", reason)
+        end)
+
+        it("should honor global_qps_limit override", function()
+            ngx.shared.session_track:set("cc_config:global_qps_limit", 2)
+            ngx.shared.rate_limit:set("global:qps", 2)
+
+            local action, reason = cc_protect.check("10.0.1.3", "GET", "/")
+            assert.equals("block", action)
+            assert.equals("global_exceeded", reason)
+        end)
+
+        it("should honor window_size override for path scan TTL", function()
+            ngx.shared.session_track:set("cc_config:window_size", 1)
+
+            cc_protect.record_404("10.0.1.4")
+            assert.equals(1, ngx.shared.session_track:get("scan:10.0.1.4"))
+
+            advance_time(2)
+            assert.is_nil(ngx.shared.session_track:get("scan:10.0.1.4"))
+        end)
+    end)
 end)
