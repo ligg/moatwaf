@@ -52,6 +52,7 @@ docker run -d --name moat-waf \
 | `WAF_MAX_UPLOAD_SIZE` | 最大上传文件大小 | `500m` |
 | `WAF_UPLOAD_SCAN_LIMIT` | 全量内容扫描阈值，超过该大小的上传只做扩展名/魔数前缀检查 | `20m` |
 | `WAF_MODE` | 运行模式：`block`（拦截）或 `log_only`（仅记录） | `block` |
+| `WAF_CC_CHALLENGE_ENABLED` | 启动时默认开启 JS Challenge（`true`/`false`）；面板运行时修改仍可覆盖，重启后回到该默认值 | `false` |
 | `WAF_LOG_DIR` | 日志目录 | `/opt/moat/logs` |
 
 ### 访问管理面板
