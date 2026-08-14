@@ -236,12 +236,12 @@ function _M.get_logs(page, per_page, rule_id_filter)
 
     local logs_dict = ngx.shared.waf_logs
     if not logs_dict then
-        return { logs = cjson.empty_array, total = 0, page = page, per_page = per_page }
+        return { logs = {}, total = 0, page = page, per_page = per_page }
     end
 
     local max_id = logs_dict:get("log_max_id") or 0
     if max_id == 0 then
-        return { logs = cjson.empty_array, total = 0, page = page, per_page = per_page }
+        return { logs = {}, total = 0, page = page, per_page = per_page }
     end
 
     local all_logs = {}
@@ -266,7 +266,7 @@ function _M.get_logs(page, per_page, rule_id_filter)
     end
 
     return {
-        logs = page_logs,
+        logs = (#page_logs == 0) and cjson.empty_array or page_logs,
         total = total,
         page = page,
         per_page = per_page
