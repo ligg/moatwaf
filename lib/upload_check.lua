@@ -603,6 +603,155 @@ local function get_streaming_upload()
     return nil
 end
 
+local function is_http2()
+    local ok, version = pcall(ngx.req.http_version)
+    return ok and version == 2
+end
+
+local function trim_crlf(s)
+    return (s:gsub("[\r\n]+$", ""))
+end
+
+local function parse_part_headers_and_body(part)
+    local headers, body
+
+    local sep_start, sep_end = part:find("\r\n\r\n", 1, true)
+    if sep_start then
+        headers = part:sub(1, sep_start - 1)
+        body = part:sub(sep_end + 1)
+    else
+        local lf_start, lf_end = part:find("\n\n", 1, true)
+        if lf_start then
+            headers = part:sub(1, lf_start - 1)
+            body = part:sub(lf_end + 1)
+        else
+            headers = part
+            body = ""
+        end
+    end
+
+    local parsed = {}
+    for line in headers:gmatch("[^\r\n]+") do
+        local key, value = line:match("^([^:]+):%s*(.-)%s*$")
+        if key then
+            parsed[key:lower()] = value
+        end
+    end
+
+    local filename = _M.extract_filename(parsed)
+    local content_type = parsed["content-type"] or ""
+    return filename, content_type, body
+end
+
+local function split_multipart_parts(body, boundary)
+    local parts = {}
+    local marker = "--" .. boundary
+    local pos = 1
+
+    while true do
+        local start = body:find(marker, pos, true)
+        if not start then
+            break
+        end
+
+        local data_start = start + #marker
+        if body:sub(data_start, data_start + 1) == "--" then
+            break
+        end
+
+        if body:sub(data_start, data_start + 1) == "\r\n" then
+            data_start = data_start + 2
+        elseif body:sub(data_start, data_start) == "\n" then
+            data_start = data_start + 1
+        end
+
+        local next_marker = body:find(marker, data_start, true)
+        if next_marker then
+            local part = trim_crlf(body:sub(data_start, next_marker - 1))
+            parts[#parts + 1] = part
+            pos = next_marker
+        else
+            local end_marker = body:find(marker .. "--", data_start, true)
+            if end_marker then
+                local part = trim_crlf(body:sub(data_start, end_marker - 1))
+                parts[#parts + 1] = part
+            else
+                local part = trim_crlf(body:sub(data_start))
+                parts[#parts + 1] = part
+            end
+            break
+        end
+    end
+
+    return parts
+end
+
+local function parse_first_file_part_from_prefix(prefix, boundary)
+    if not prefix or prefix == "" then
+        return nil, nil, nil
+    end
+
+    local parts = split_multipart_parts(prefix, boundary)
+    for _, part in ipairs(parts) do
+        local filename, content_type, body = parse_part_headers_and_body(part)
+        if filename and filename ~= "" then
+            local body_prefix = (#body >= 8) and body:sub(1, 8) or body
+            return filename, content_type, body_prefix
+        end
+    end
+
+    return nil, nil, nil
+end
+
+-- HTTP/2 fallback: resty.upload cannot parse HTTP/2 request bodies and throws
+-- "http v2 not supported yet". Parse the multipart body without resty.upload,
+-- using the same validation rules as the streaming path.
+local function check_multipart_http2(content_type, boundary)
+    local body_size = _M.get_body_size()
+
+    if body_size and body_size > MAX_UPLOAD_SIZE then
+        return {
+            allowed = false,
+            reason = string.format(
+                "UPLOAD-002: File size exceeds limit (%d MB max, got %d bytes)",
+                MAX_UPLOAD_SIZE / (1024 * 1024), body_size
+            )
+        }
+    end
+
+    if body_size and body_size > SCAN_LIMIT then
+        local prefix = _M.read_body_prefix(8192)
+        local filename, part_content_type, body_prefix =
+            parse_first_file_part_from_prefix(prefix, boundary)
+        return _M.check_light(filename, part_content_type or content_type, body_prefix)
+    end
+
+    local full_body = _M.read_full_body()
+    if not full_body then
+        return { allowed = true }
+    end
+
+    local parts = split_multipart_parts(full_body, boundary)
+    for _, part in ipairs(parts) do
+        local filename, part_content_type, body =
+            parse_part_headers_and_body(part)
+        if filename and filename ~= "" then
+            local body_prefix = (#body >= 8) and body:sub(1, 8) or body
+            local result = _M.check(
+                filename,
+                part_content_type ~= "" and part_content_type or content_type,
+                body_prefix,
+                body
+            )
+            if result and not result.allowed then
+                return result
+            end
+        end
+    end
+
+    return { allowed = true }
+end
+
 -- Fallback for environments without resty.upload: validate only the first
 -- file using the legacy prefix/full-body path.
 local function check_multipart_fallback(content_type)
@@ -647,6 +796,10 @@ function _M.check_multipart(content_type)
     if not boundary then
         -- Not parseable as multipart; fall back to the legacy single-file path.
         return check_multipart_fallback(content_type)
+    end
+
+    if is_http2() then
+        return check_multipart_http2(content_type, boundary)
     end
 
     local upload = get_streaming_upload()

@@ -28,6 +28,7 @@ jobs:
             done
             /usr/local/openresty/luajit/bin/luajit tests/unit/test_cc_protect.lua
             /usr/local/openresty/luajit/bin/luajit tests/unit/test_ip_control.lua
+            /usr/local/openresty/luajit/bin/luajit tests/unit/test_upload_check_http2.lua
           '
 
   build-and-push:
