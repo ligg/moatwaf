@@ -228,21 +228,14 @@ function _M.store_blocked_log(entry)
     end
 end
 
--- Retrieve logs from shared dict with pagination and optional rule_id filter
-function _M.get_logs(page, per_page, rule_id_filter)
-    page = page or 1
-    per_page = per_page or 20
-    if per_page > 100 then per_page = 100 end
-
+-- Return all memory logs (up to LOG_MAX_ENTRIES) for a given rule ID filter.
+-- Used internally so get_all_logs can paginate after merging with file logs.
+local function get_memory_logs(rule_id_filter)
     local logs_dict = ngx.shared.waf_logs
-    if not logs_dict then
-        return { logs = {}, total = 0, page = page, per_page = per_page }
-    end
+    if not logs_dict then return {} end
 
     local max_id = logs_dict:get("log_max_id") or 0
-    if max_id == 0 then
-        return { logs = {}, total = 0, page = page, per_page = per_page }
-    end
+    if max_id == 0 then return {} end
 
     local all_logs = {}
     local start_id = math.max(1, max_id - LOG_MAX_ENTRIES + 1)
@@ -257,6 +250,16 @@ function _M.get_logs(page, per_page, rule_id_filter)
             end
         end
     end
+    return all_logs
+end
+
+-- Retrieve logs from shared dict with pagination and optional rule_id filter
+function _M.get_logs(page, per_page, rule_id_filter)
+    page = page or 1
+    per_page = per_page or 20
+    if per_page > 100 then per_page = 100 end
+
+    local all_logs = get_memory_logs(rule_id_filter)
 
     local total = #all_logs
     local offset = (page - 1) * per_page
@@ -365,7 +368,6 @@ function _M.get_logs_from_files(filters, page, page_per_page)
         end
     end
 
-    -- Collect matching entries from all files
     local all_matching = {}
     for _, date_str in ipairs(dates_to_scan) do
         local filepath = LOG_DIR .. "/waf_blocked_" .. date_str .. ".log"
@@ -409,6 +411,56 @@ function _M.get_logs_from_files(filters, page, page_per_page)
     }
 end
 
+-- Return all matching file logs (up to MAX_FILE_LOG_ENTRIES) for a filter set.
+local function get_file_logs(filters)
+    filters = filters or {}
+
+    local dates_to_scan = {}
+    if filters.start_time and filters.end_time then
+        local day_start = filters.start_time - (filters.start_time % 86400)
+        local day_end = filters.end_time - (filters.end_time % 86400)
+        for t = day_start, day_end, 86400 do
+            table.insert(dates_to_scan, os.date("!%Y-%m-%d", t))
+        end
+    elseif filters.start_time then
+        local day_start = filters.start_time - (filters.start_time % 86400)
+        local today = os.time() - (os.time() % 86400)
+        for t = day_start, today, 86400 do
+            table.insert(dates_to_scan, os.date("!%Y-%m-%d", t))
+        end
+    else
+        local today = os.time() - (os.time() % 86400)
+        for i = 0, 6 do
+            table.insert(dates_to_scan, os.date("!%Y-%m-%d", today - i * 86400))
+        end
+    end
+
+    local all_matching = {}
+    for _, date_str in ipairs(dates_to_scan) do
+        local filepath = LOG_DIR .. "/waf_blocked_" .. date_str .. ".log"
+        local f = io.open(filepath, "r")
+        if f then
+            for line in f:lines() do
+                if line and line ~= "" then
+                    local ok, entry = pcall(cjson.decode, line)
+                    if ok and entry and matches_filters(entry, filters) then
+                        table.insert(all_matching, entry)
+                        if #all_matching >= MAX_FILE_LOG_ENTRIES then
+                            break
+                        end
+                    end
+                end
+            end
+            f:close()
+        end
+        if #all_matching >= MAX_FILE_LOG_ENTRIES then
+            break
+        end
+    end
+
+    return all_matching
+end
+
 -- Get all logs (memory + files) with unified filtering and pagination
 -- Memory layer: recent logs from ngx.shared.waf_logs (fast, bounded)
 -- File layer: historical logs from JSON Lines files (complete history)
@@ -422,15 +474,13 @@ function _M.get_all_logs(filters, page, per_page)
     per_page = per_page or 20
     if per_page > 100 then per_page = 100 end
 
-    -- Get memory logs
-    local mem_result = _M.get_logs(page, per_page, filters and filters.rule_id)
-    local mem_logs = mem_result.logs or {}
+    -- Get all memory and file logs before paginating. Paginating each source
+    -- separately before merging was a bug: page 2+ could be empty and total
+    -- was undercounted, which hid the pagination controls.
+    local mem_logs = get_memory_logs(filters and filters.rule_id)
+    local file_logs = get_file_logs(filters)
 
-    -- Get file logs
-    local file_result = _M.get_logs_from_files(filters, page, per_page)
-    local file_logs = file_result.logs or {}
-
-    -- Merge: memory logs take priority (newer), deduplicate by id
+    -- Merge: memory logs take priority (newer), deduplicate by id.
     local seen = {}
     local merged = {}
     for _, entry in ipairs(mem_logs) do

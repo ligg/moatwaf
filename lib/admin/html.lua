@@ -550,7 +550,7 @@ if(d&&!d.error){toast(t('ip.deleted'),'success');loadList(type);}else{toast(t('i
 });
 });
 }
-var currentTab='dashboard',logPage=1,logTotal=0,logPerPage=20,logTimer=null;
+var currentTab='dashboard',logPage=1,logTotal=0,logPerPage=20,logTimer=null,logCache={};
 function switchTab(tab){
 currentTab=tab;
 document.querySelectorAll('.tabs button').forEach(function(b,i){b.classList.toggle('active',(i===0&&tab==='dashboard')||(i===1&&tab==='logs')||(i===2&&tab==='rules')||(i===3&&tab==='nginx'));});
@@ -579,12 +579,14 @@ document.getElementById('logs-status').textContent=t('logs.loading');
 api('GET','__SG_ADMIN__logs'+params).then(function(d){
 if(!d){document.getElementById('logs-status').textContent=t('logs.query_failed');return;}
 logTotal=d.total||0;
+logCache={};
 var tbody=document.getElementById('logs-table').querySelector('tbody');
 var empty=document.getElementById('logs-empty');
 tbody.innerHTML='';
 if(!d.logs||d.logs.length===0){empty.style.display='block';renderPagination();document.getElementById('logs-status').textContent='共 '+logTotal+' 条';return;}
 empty.style.display='none';
 d.logs.forEach(function(log){
+logCache[log.id]=log;
 var tr=document.createElement('tr');
 tr.style.cursor='pointer';
 tr.setAttribute('onclick',"expandLogDetail('"+log.id+"',this)");
@@ -824,14 +826,19 @@ loadLogs();
 function expandLogDetail(id,row){
 var next=row.nextElementSibling;
 if(next&&next.querySelector('.log-detail')){next.style.display=next.style.display==='none'?'':'none';return;}
+var cached=logCache[id];
+if(cached){insertLogDetail(row,cached);return;}
 api('GET','__SG_ADMIN__logs/'+id).then(function(log){
 if(!log||log.error)return;
+insertLogDetail(row,log);
+});
+}
+function insertLogDetail(row,log){
 var h='<div class="log-detail"><div class="detail-grid">';
 [['时间',formatTime(log.timestamp)],['源IP',log.source_ip],['方法',log.method],['URI',log.uri],['Query',log.query_string],['规则ID',log.rule_id],['级别',log.severity],['动作',log.action],['原因',log.reason],['Host',log.host],['UA',log.user_agent]].forEach(function(f){h+='<div class="dlabel">'+f[0]+':</div><div class="dvalue">'+(f[1]||'-')+'</div>';});
 h+='</div></div>';
 var tr=document.createElement('tr');tr.innerHTML='<td colspan="7">'+h+'</td>';
 row.parentNode.insertBefore(tr,row.nextSibling);
-});
 }
 function banIP(ip){
 showConfirm(t('logs.ban'),t('logs.ban_confirm'),'logs.ban','common.cancel').then(function(ok){
