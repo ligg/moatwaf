@@ -196,10 +196,10 @@ action: BLOCK
 
 ---
 id: SQLI-025
-description: "SQL comment sequences: -- or # at end"
+description: "SQL comment sequences at value boundary: -- or # after a quote"
 severity: medium
 target: ARGS
-pattern: "(?i)('\\s*(--|#)|(\"\\s*(--|#)))"
+pattern: "(?i)(?:^|[=&])['\"]\\s*(?:--|#)|['\"]\\s*(?:--|#)(?=\\s*(?:&|$))"
 action: BLOCK
 
 ---
