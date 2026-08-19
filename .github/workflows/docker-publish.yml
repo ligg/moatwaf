@@ -31,6 +31,7 @@ jobs:
             /usr/local/openresty/luajit/bin/luajit tests/unit/test_upload_check_http2.lua
             /usr/local/openresty/luajit/bin/luajit tests/unit/test_challenge_cors.lua
             /usr/local/openresty/luajit/bin/luajit tests/unit/test_waf_challenge_verify.lua
+            /usr/local/openresty/luajit/bin/luajit tests/unit/test_waf_cors_errors.lua
           '
 
   build-and-push:

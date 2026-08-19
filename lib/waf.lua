@@ -425,6 +425,29 @@ function _M.body_filter_phase()
     -- duplicate content. This phase is read-only for inspection/logging.
 end
 
+-- Add CORS headers to every error response (4xx/5xx), including WAF blocks,
+-- nginx limit_req 429s, and upstream errors. Without this, browsers report
+-- cross-origin requests blocked by the WAF as generic CORS errors.
+function _M.header_filter_phase()
+    local status = ngx.status
+    if status < 400 then
+        return
+    end
+    if ngx.header["Access-Control-Allow-Origin"] ~= nil then
+        return
+    end
+
+    local origin = ngx.var.http_origin
+    if origin and origin ~= "" then
+        ngx.header["Access-Control-Allow-Origin"] = origin
+        ngx.header["Vary"] = "Origin"
+    else
+        ngx.header["Access-Control-Allow-Origin"] = "*"
+    end
+    ngx.header["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
+    ngx.header["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+end
+
 -- Log phase: record request details
 function _M.log_phase()
     local ip = ngx.ctx.client_ip

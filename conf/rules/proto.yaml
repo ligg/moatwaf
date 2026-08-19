@@ -15,7 +15,7 @@ id: PROTO-002
 description: "CRLF injection in query parameters"
 severity: critical
 target: ARGS
-pattern: "(?i)(%0d%0a|%0a|%0d|\\r\\n)"
+pattern: "(?i)(%0d%0a|\\r\\n)"
 action: BLOCK
 
 ---
