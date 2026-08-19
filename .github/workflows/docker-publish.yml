@@ -29,6 +29,8 @@ jobs:
             /usr/local/openresty/luajit/bin/luajit tests/unit/test_cc_protect.lua
             /usr/local/openresty/luajit/bin/luajit tests/unit/test_ip_control.lua
             /usr/local/openresty/luajit/bin/luajit tests/unit/test_upload_check_http2.lua
+            /usr/local/openresty/luajit/bin/luajit tests/unit/test_challenge_cors.lua
+            /usr/local/openresty/luajit/bin/luajit tests/unit/test_waf_challenge_verify.lua
           '
 
   build-and-push:

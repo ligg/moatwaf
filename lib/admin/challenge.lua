@@ -9,6 +9,18 @@ local CHALLENGE_SECRET = os.getenv("WAF_CHALLENGE_SECRET") or "moat-challenge-se
 local CHALLENGE_TTL = 1800  -- 30 minutes
 local CHALLENGE_MAX_AGE = 300  -- challenge question expires after 5 minutes
 
+local function set_cors_headers()
+    local origin = ngx.var.http_origin
+    if origin and origin ~= "" then
+        ngx.header["Access-Control-Allow-Origin"] = origin
+        ngx.header["Vary"] = "Origin"
+    else
+        ngx.header["Access-Control-Allow-Origin"] = "*"
+    end
+    ngx.header["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+    ngx.header["Access-Control-Allow-Headers"] = "Content-Type"
+end
+
 local function secure_compare(a, b)
     if type(a) ~= "string" or type(b) ~= "string" then return false end
     if #a ~= #b then return false end
@@ -40,6 +52,8 @@ local function make_challenge_cookie(ip, expiry)
 end
 
 function _M.generate_challenge(redirect_url)
+    set_cors_headers()
+
     local admin_html = require("lib.admin.html")
     local a = math.random(1, 50)
     local b = math.random(1, 50)
@@ -65,6 +79,8 @@ function _M.generate_challenge(redirect_url)
 end
 
 function _M.handle_verify()
+    set_cors_headers()
+
     local ok = pcall(ngx.req.read_body)
     local body = nil
     if ok then

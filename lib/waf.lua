@@ -84,8 +84,44 @@ local function get_ip_lists()
     return ip_lists
 end
 
+-- Challenge verify requests must be handled by the WAF itself on every
+-- protected domain, not only on the admin host. Otherwise the challenge page
+-- served on api/business domains posts to /waf-mgmt-*/challenge/verify and
+-- falls through to the upstream (Kong), returning 404 -> "验证失败".
+local function is_challenge_verify_request()
+    local admin_path = os.getenv("WAF_ADMIN_PATH") or "/admin/"
+    if admin_path:sub(-1) ~= "/" then
+        admin_path = admin_path .. "/"
+    end
+
+    local uri = ngx.var.uri or ""
+    if uri ~= admin_path .. "challenge/verify" then
+        return false
+    end
+
+    local ok, method = pcall(ngx.req.get_method)
+    if not ok or type(method) ~= "string" then
+        return false
+    end
+    return method == "POST" or method == "OPTIONS"
+end
+
 -- Rewrite phase: IP control
 function _M.rewrite_phase()
+    if is_challenge_verify_request() then
+        local method = ngx.req.get_method()
+        if method == "OPTIONS" then
+            ngx.status = 204
+            ngx.header["Access-Control-Allow-Origin"] = ngx.var.http_origin or "*"
+            ngx.header["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+            ngx.header["Access-Control-Allow-Headers"] = "Content-Type"
+            return ngx.exit(204)
+        end
+
+        local challenge = require("lib.admin.challenge")
+        return challenge.handle_verify()
+    end
+
     -- Host header validation
     local host = ngx.var.http_host
     if not host or host == "" then
