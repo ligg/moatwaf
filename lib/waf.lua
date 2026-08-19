@@ -106,6 +106,16 @@ local function is_challenge_verify_request()
     return method == "POST" or method == "OPTIONS"
 end
 
+-- JS Challenge must only be served for browser page navigations. Static
+-- assets and API/XHR requests carry Accept: application/json (or no HTML
+-- accept) and would otherwise receive the challenge HTML, which browsers
+-- then try to parse as JS/JSON and break the whole page.
+local function is_html_navigation_request()
+    local accept = ngx.var.http_accept or ""
+    return accept:find("text/html", 1, true) ~= nil
+        or accept:find("application/xhtml+xml", 1, true) ~= nil
+end
+
 -- Rewrite phase: IP control
 function _M.rewrite_phase()
     if is_challenge_verify_request() then
@@ -258,11 +268,18 @@ function _M.access_phase()
         action, reason = cc_protect.check(ip, method, uri)
     end
     if action == "challenge" then
-        local challenge = require("lib.admin.challenge")
-        if not challenge.has_valid_challenge() then
-            return challenge.generate_challenge(ngx.var.request_uri)
+        if not is_html_navigation_request() then
+            -- Subresources / API calls must not be answered with HTML.
+            -- Keep CC protection for page navigations; normal traffic is
+            -- covered by the raised flood/CC limits.
+            action = "pass"
+            reason = "challenge_skipped_non_html"
+        else
+            local challenge = require("lib.admin.challenge")
+            if not challenge.has_valid_challenge() then
+                return challenge.generate_challenge(ngx.var.request_uri)
+            end
         end
-        -- Has valid challenge cookie, allow through
     elseif action == "block" then
         ngx.ctx.action = "block"
         ngx.ctx.rule_id = "CC-001"

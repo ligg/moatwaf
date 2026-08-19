@@ -27,9 +27,15 @@ for name, mod in pairs(modules) do
 end
 
 local handle_verify_called = false
+local challenge_generated = false
 package.loaded["lib.admin.challenge"] = {
     handle_verify = function()
         handle_verify_called = true
+        return true
+    end,
+    has_valid_challenge = function() return false end,
+    generate_challenge = function()
+        challenge_generated = true
         return true
     end,
 }
@@ -52,7 +58,11 @@ _G.ngx = {
     },
     req = {
         get_method = function() return "POST" end,
+        get_headers = function() return {} end,
+        read_body = function() end,
     },
+    ctx = {},
+    shared = {},
 }
 
 local waf = require("lib.waf")
@@ -78,6 +88,37 @@ assert(exit_status == 204, "OPTIONS challenge verify should return 204")
 assert(
     ngx.header["Access-Control-Allow-Origin"] == "https://cloud.gongpinlian.com",
     "OPTIONS challenge verify should include Access-Control-Allow-Origin"
+)
+
+-- Non-HTML requests (JS/CSS/API) must NOT receive an HTML challenge page.
+modules["lib.cc_protect"].check = function()
+    return "challenge", "rate_exceeded"
+end
+modules["lib.rule_engine"].check = function()
+    return "pass"
+end
+
+ngx.var.uri = "/api/Yunos/SetConfiguration/SetConfigurationList"
+ngx.var.request_uri = "/api/Yunos/SetConfiguration/SetConfigurationList"
+ngx.var.http_accept = "application/json"
+ngx.req.get_method = function() return "GET" end
+ngx.ctx = { client_ip = "1.2.3.4", whitelisted = false }
+challenge_generated = false
+
+waf.access_phase()
+
+assert(
+    challenge_generated == false,
+    "non-HTML requests must not be answered with an HTML challenge page"
+)
+
+-- Browser page navigations keep the JS Challenge.
+ngx.var.http_accept = "text/html"
+challenge_generated = false
+waf.access_phase()
+assert(
+    challenge_generated == true,
+    "HTML page navigations should still receive the JS Challenge"
 )
 
 print("ALL waf challenge verify regression tests PASSED")
