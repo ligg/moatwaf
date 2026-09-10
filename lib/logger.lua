@@ -530,21 +530,58 @@ end
 -- Chart data functions
 ---------------------------------------------------------------------------
 
--- Record hourly stats snapshot for trend charts
+-- Trend buckets hold the traffic seen *during* an hour, not the lifetime
+-- totals: the counters in waf_stats only ever grow, so differencing two
+-- snapshots at read time is what put the lifetime count on the oldest chart
+-- point. The per-hour bucket is what the chart draws.
+local TREND_BLOCKED_PREFIX = "trend:v2:blocked:"
+local TREND_PASSED_PREFIX = "trend:v2:passed:"
+local TREND_PREV_BLOCKED = "trend:v2:prev_blocked"
+local TREND_PREV_PASSED = "trend:v2:prev_passed"
+local TREND_TTL = 86400 * 7  -- 7 days
+
+-- Add the traffic accumulated since the previous sample to this hour's
+-- bucket. Called on a timer, so several samples land in the same hour.
 function _M.record_trend_sample()
     local stats = ngx.shared.waf_stats
     if not stats then return end
 
     local blocked = stats:get("blocked_total") or 0
     local passed = stats:get("passed_total") or 0
-    local hour = math.floor(ngx.time() / 3600)
-    local hour_key = "trend:hour:" .. hour
 
-    stats:set(hour_key, cjson.encode({
-        blocked = blocked,
-        passed = passed,
-        timestamp = ngx.time()
-    }), 86400 * 7)  -- 7 day TTL
+    local prev_blocked = stats:get(TREND_PREV_BLOCKED)
+    local prev_passed = stats:get(TREND_PREV_PASSED)
+
+    local delta_blocked, delta_passed
+
+    if prev_blocked == nil then
+        -- Nothing to diff against yet (first sample after the dict was
+        -- created); traffic predating the sampler is not ours to attribute.
+        delta_blocked = 0
+    elseif blocked >= prev_blocked then
+        delta_blocked = blocked - prev_blocked
+    else
+        -- A restart reset the counters; everything counted so far is new.
+        delta_blocked = blocked
+    end
+
+    if prev_passed == nil then
+        delta_passed = 0
+    elseif passed >= prev_passed then
+        delta_passed = passed - prev_passed
+    else
+        delta_passed = passed
+    end
+
+    local hour = math.floor(ngx.time() / 3600)
+
+    -- incr(): atomic, so workers sampling at the same moment cannot clobber
+    -- each other the way a read-modify-write would.
+    stats:incr(TREND_BLOCKED_PREFIX .. hour, delta_blocked, 0, TREND_TTL)
+    stats:incr(TREND_PASSED_PREFIX .. hour, delta_passed, 0, TREND_TTL)
+
+    stats:set(TREND_PREV_BLOCKED, blocked, TREND_TTL)
+    stats:set(TREND_PREV_PASSED, passed, TREND_TTL)
 end
 
 -- Get trend data for charts
@@ -556,24 +593,23 @@ function _M.get_trend_data(range)
     local hours_back = (range == "7d") and 168 or 24
 
     local labels, blocked_arr, passed_arr = {}, {}, {}
-    local prev_blocked, prev_passed = 0, 0
+    local has_data = false
 
+    -- Emit a tick for every hour in the range so the axis stays aligned;
+    -- an hour without a bucket had no traffic, which is a real zero.
     for i = hours_back, 0, -1 do
         local h = current_hour - i
-        local raw = stats:get("trend:hour:" .. h)
-        if raw then
-            local ok, data = pcall(cjson.decode, raw)
-            if ok and data then
-                table.insert(labels, os.date("%m-%d %H:00", h * 3600))
-                table.insert(blocked_arr, math.max(0, data.blocked - prev_blocked))
-                table.insert(passed_arr, math.max(0, data.passed - prev_passed))
-                prev_blocked = data.blocked
-                prev_passed = data.passed
-            end
-        end
+        table.insert(labels, os.date("%m-%d %H:00", h * 3600))
+
+        local blocked = stats:get(TREND_BLOCKED_PREFIX .. h)
+        local passed = stats:get(TREND_PASSED_PREFIX .. h)
+        if blocked or passed then has_data = true end
+
+        table.insert(blocked_arr, blocked or 0)
+        table.insert(passed_arr, passed or 0)
     end
 
-    if #labels == 0 then
+    if not has_data then
         return { labels = cjson.empty_array, blocked = cjson.empty_array, passed = cjson.empty_array }
     end
     return { labels = labels, blocked = blocked_arr, passed = passed_arr }

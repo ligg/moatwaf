@@ -21,11 +21,13 @@ jobs:
       - name: Lua syntax and unit checks
         run: |
           docker run --rm -v "$PWD":/workspace -w /workspace \
+            -e LUA_CPATH="/usr/local/openresty/lualib/?.so;;" \
             openresty/openresty:1.25.3.2-0-alpine sh -lc '
             set -e
             for f in $(find lib -name "*.lua"); do
               /usr/local/openresty/luajit/bin/luajit -e "local s=io.open(\"$f\"):read(\"*a\"); local f,e=loadstring(s); if not f then print(\"SYNTAX ERROR $f: \"..e); os.exit(1) end"
             done
+            /usr/local/openresty/luajit/bin/luajit tests/unit/test_trend.lua
             /usr/local/openresty/luajit/bin/luajit tests/unit/test_cc_protect.lua
             /usr/local/openresty/luajit/bin/luajit tests/unit/test_ip_control.lua
             /usr/local/openresty/luajit/bin/luajit tests/unit/test_upload_check_http2.lua
