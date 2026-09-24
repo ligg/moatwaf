@@ -703,10 +703,11 @@ local function parse_first_file_part_from_prefix(prefix, boundary)
     return nil, nil, nil
 end
 
--- HTTP/2 fallback: resty.upload cannot parse HTTP/2 request bodies and throws
--- "http v2 not supported yet". Parse the multipart body without resty.upload,
--- using the same validation rules as the streaming path.
-local function check_multipart_http2(content_type, boundary)
+-- Parse a multipart body that is already buffered (in memory or in a temp
+-- file), using the same validation rules as the streaming path. Used for
+-- HTTP/2 (resty.upload throws "http v2 not supported yet") and whenever
+-- resty.upload cannot initialize because the body was already read.
+local function check_multipart_from_body(content_type, boundary)
     local body_size = _M.get_body_size()
 
     if body_size and body_size > MAX_UPLOAD_SIZE then
@@ -799,7 +800,7 @@ function _M.check_multipart(content_type)
     end
 
     if is_http2() then
-        return check_multipart_http2(content_type, boundary)
+        return check_multipart_from_body(content_type, boundary)
     end
 
     local upload = get_streaming_upload()
@@ -809,6 +810,16 @@ function _M.check_multipart(content_type)
 
     local form, err = upload:new(8192)
     if not form then
+        -- resty.upload streams straight from ngx.req.socket(), which refuses to
+        -- run once the request body has been read. access_phase pre-reads the
+        -- body (the rule engine inspects POST bodies) before calling us, so
+        -- initialization fails with "request body already exists" on every
+        -- HTTP/1.1 upload. Parse the buffered body instead of rejecting a
+        -- legitimate request with UPLOAD-005.
+        local body_already_read = err and err:find("request body already exists", 1, true)
+        if body_already_read or safe_body_data() or safe_body_file() then
+            return check_multipart_from_body(content_type, boundary)
+        end
         return { allowed = false, reason = "UPLOAD-005: Failed to initialize multipart parser: " .. (err or "unknown") }
     end
 
