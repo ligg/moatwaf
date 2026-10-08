@@ -1,13 +1,23 @@
 # Scanner and Automated Tool Detection Rules
 # Covers: vulnerability scanners, penetration testing tools,
 #         crawling tools, brute-force tools
+#
+# NOTE: the HEADERS target is the whole header block joined as
+#   "name: value\nname: value\n..."
+# (see rule_engine.format_headers), NOT the User-Agent alone. Scanner
+# signatures must therefore be anchored to the User-Agent header line,
+# otherwise any other header or cookie that happens to contain the keyword
+# (e.g. "nikto") blocks legitimate traffic. Use the form
+#   "(?i)User-Agent:[^\r\n]*<keyword>"
+# which matches within the User-Agent line only ([^\r\n] cannot cross the
+# newline separator).
 
 ---
 id: SCAN-001
 description: "sqlmap SQL injection tool"
 severity: high
 target: HEADERS
-pattern: "(?i)sqlmap"
+pattern: "(?i)User-Agent:[^\\r\\n]*sqlmap"
 action: BLOCK
 
 ---
@@ -15,7 +25,7 @@ id: SCAN-002
 description: "Nikto web scanner"
 severity: high
 target: HEADERS
-pattern: "(?i)nikto"
+pattern: "(?i)User-Agent:[^\\r\\n]*nikto"
 action: BLOCK
 
 ---
@@ -23,7 +33,7 @@ id: SCAN-003
 description: "Nmap scanner"
 severity: high
 target: HEADERS
-pattern: "(?i)nmap"
+pattern: "(?i)User-Agent:[^\\r\\n]*nmap"
 action: BLOCK
 
 ---
@@ -31,7 +41,7 @@ id: SCAN-004
 description: "Burp Suite"
 severity: high
 target: HEADERS
-pattern: "(?i)(burp|burpsuite)"
+pattern: "(?i)User-Agent:[^\\r\\n]*(burp|burpsuite)"
 action: BLOCK
 
 ---
@@ -39,7 +49,7 @@ id: SCAN-005
 description: "Acunetix vulnerability scanner"
 severity: high
 target: HEADERS
-pattern: "(?i)acunetix"
+pattern: "(?i)User-Agent:[^\\r\\n]*acunetix"
 action: BLOCK
 
 ---
@@ -47,7 +57,7 @@ id: SCAN-006
 description: "Nessus vulnerability scanner"
 severity: high
 target: HEADERS
-pattern: "(?i)nessus"
+pattern: "(?i)User-Agent:[^\\r\\n]*nessus"
 action: BLOCK
 
 ---
@@ -55,7 +65,7 @@ id: SCAN-007
 description: "DirBuster directory brute-force"
 severity: high
 target: HEADERS
-pattern: "(?i)dirbuster"
+pattern: "(?i)User-Agent:[^\\r\\n]*dirbuster"
 action: BLOCK
 
 ---
@@ -63,7 +73,7 @@ id: SCAN-008
 description: "Gobuster directory brute-force"
 severity: high
 target: HEADERS
-pattern: "(?i)gobuster"
+pattern: "(?i)User-Agent:[^\\r\\n]*gobuster"
 action: BLOCK
 
 ---
@@ -71,7 +81,7 @@ id: SCAN-009
 description: "WPScan WordPress scanner"
 severity: high
 target: HEADERS
-pattern: "(?i)wpscan"
+pattern: "(?i)User-Agent:[^\\r\\n]*wpscan"
 action: BLOCK
 
 ---
@@ -79,7 +89,7 @@ id: SCAN-010
 description: "Hydra brute-force tool"
 severity: high
 target: HEADERS
-pattern: "(?i)hydra"
+pattern: "(?i)User-Agent:[^\\r\\n]*hydra"
 action: BLOCK
 
 ---
@@ -87,7 +97,7 @@ id: SCAN-011
 description: "Metasploit framework"
 severity: high
 target: HEADERS
-pattern: "(?i)metasploit"
+pattern: "(?i)User-Agent:[^\\r\\n]*metasploit"
 action: BLOCK
 
 ---
@@ -95,7 +105,7 @@ id: SCAN-012
 description: "ZmEu scanner"
 severity: high
 target: HEADERS
-pattern: "(?i)zmeu"
+pattern: "(?i)User-Agent:[^\\r\\n]*zmeu"
 action: BLOCK
 
 ---
@@ -103,7 +113,7 @@ id: SCAN-013
 description: "Havij SQL injection tool"
 severity: high
 target: HEADERS
-pattern: "(?i)havij"
+pattern: "(?i)User-Agent:[^\\r\\n]*havij"
 action: BLOCK
 
 ---
@@ -111,7 +121,7 @@ id: SCAN-014
 description: "w3af web application attack framework"
 severity: high
 target: HEADERS
-pattern: "(?i)w3af"
+pattern: "(?i)User-Agent:[^\\r\\n]*w3af"
 action: BLOCK
 
 ---
@@ -119,7 +129,7 @@ id: SCAN-015
 description: "Masscan port scanner"
 severity: high
 target: HEADERS
-pattern: "(?i)masscan"
+pattern: "(?i)User-Agent:[^\\r\\n]*masscan"
 action: BLOCK
 
 ---
@@ -159,7 +169,7 @@ id: SCAN-020
 description: "OWASP ZAP scanner"
 severity: high
 target: HEADERS
-pattern: "(?i)(owasp[\\s-]|\\bzap\\b)"
+pattern: "(?i)User-Agent:[^\\r\\n]*(owasp[\\s-]|\\bzap\\b)"
 action: BLOCK
 
 ---
@@ -167,7 +177,7 @@ id: SCAN-021
 description: "Skipfish web application scanner"
 severity: high
 target: HEADERS
-pattern: "(?i)skipfish"
+pattern: "(?i)User-Agent:[^\\r\\n]*skipfish"
 action: BLOCK
 
 ---
@@ -175,5 +185,5 @@ id: SCAN-022
 description: "Arachni web application security scanner"
 severity: high
 target: HEADERS
-pattern: "(?i)arachni"
+pattern: "(?i)User-Agent:[^\\r\\n]*arachni"
 action: BLOCK
