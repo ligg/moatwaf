@@ -93,7 +93,7 @@ jobs:
         run: mkdir -p security-artifacts
 
       - name: Generate CycloneDX SBOM
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: moat-waf:security-scan
           format: cyclonedx
@@ -103,7 +103,7 @@ jobs:
           severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
 
       - name: Generate Trivy SARIF
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: moat-waf:security-scan
           format: sarif
