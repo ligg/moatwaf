@@ -6,11 +6,12 @@ logs/
 .mcp.json
 .playwright-mcp/
 .superpowers/
-docs/
+docs/*
+!docs/superpowers/
+!docs/superpowers/**
 .remember/
 .codegraph/
 .claude/CLAUDE.md
 docs/operations-runbook.md
 docs/waf-competitive-analysis.md
-docs/superpowers/
 CLAUDE.md
