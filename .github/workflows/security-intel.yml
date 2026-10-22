@@ -10,6 +10,12 @@ on:
       - "tests/security_automation/**"
       - "scripts/build_rule_pack.py"
       - ".github/workflows/security-intel.yml"
+      - "Dockerfile"
+      - "docker-entrypoint.sh"
+      - "lib/**"
+      - "rules/**"
+      - "conf/rules/**"
+      - "security/**"
   push:
     branches:
       - master
@@ -18,6 +24,12 @@ on:
       - "tests/security_automation/**"
       - "scripts/build_rule_pack.py"
       - ".github/workflows/security-intel.yml"
+      - "Dockerfile"
+      - "docker-entrypoint.sh"
+      - "lib/**"
+      - "rules/**"
+      - "conf/rules/**"
+      - "security/**"
 
 concurrency:
   group: security-intel
@@ -76,6 +88,9 @@ jobs:
 
       - name: Build WAF image
         run: docker build -t moat-waf:security-scan .
+
+      - name: Prepare artifact directory
+        run: mkdir -p security-artifacts
 
       - name: Generate CycloneDX SBOM
         uses: aquasecurity/trivy-action@0.36.0

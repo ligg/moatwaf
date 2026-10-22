@@ -14,7 +14,7 @@ from security_automation.feeds import (
     query_osv,
 )
 from security_automation.matcher import build_findings, normalize_severity
-from security_automation.models import Component, KeVEntry
+from security_automation.models import SEVERITY_ORDER, Component, KeVEntry
 from security_automation.report import render_issue, render_report
 from security_automation.sbom import load_components
 
@@ -125,8 +125,13 @@ def enrich_scan_with_nvd(
         severity = cvss.get("baseSeverity")
         if isinstance(score, (int, float)):
             finding["cvssScore"] = float(score)
-            if finding.get("severity") == "unknown":
-                finding["severity"] = normalize_severity(severity)
+            current_severity = normalize_severity(finding.get("severity"))
+            nvd_severity = normalize_severity(severity)
+            if (
+                SEVERITY_ORDER[nvd_severity]
+                < SEVERITY_ORDER.get(current_severity, SEVERITY_ORDER["unknown"])
+            ):
+                finding["severity"] = nvd_severity
         references = set(finding.get("references", []))
         for raw in document.get("references", []) or []:
             if isinstance(raw, dict) and isinstance(raw.get("url"), str):

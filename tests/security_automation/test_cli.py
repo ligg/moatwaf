@@ -77,6 +77,38 @@ class CliTests(unittest.TestCase):
         self.assertEqual(scan["findings"][0]["cvssScore"], 9.8)
         self.assertIn("https://nvd.nist.gov/vuln/detail/CVE-2026-0001", scan["findings"][0]["references"])
 
+    def test_enrich_scan_with_nvd_raises_severity_when_nvd_is_more_severe(self):
+        scan = {
+            "findings": [
+                {
+                    "id": "GHSA-test",
+                    "aliases": ["CVE-2026-0001"],
+                    "cveIds": ["CVE-2026-0001"],
+                    "severity": "medium",
+                    "cvssScore": None,
+                    "references": [],
+                }
+            ]
+        }
+        nvd_documents = {
+            "CVE-2026-0001": {
+                "metrics": {
+                    "cvssMetricV31": [
+                        {
+                            "cvssData": {
+                                "baseScore": 9.8,
+                                "baseSeverity": "CRITICAL",
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+
+        enrich_scan_with_nvd(scan, nvd_documents)
+
+        self.assertEqual(scan["findings"][0]["severity"], "critical")
+
     def test_write_scan_outputs_creates_json_and_markdown(self):
         scan = {
             "generatedAt": "2026-10-22T00:00:00Z",
