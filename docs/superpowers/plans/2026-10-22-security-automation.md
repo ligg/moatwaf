@@ -1,6 +1,6 @@
 # Security Automation Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add a repository-native, scheduled security control plane and signed rule-pack release flow without adding runtime dependencies to Moat WAF.
 
@@ -33,7 +33,7 @@
 - Produces: `Component(name: str, version: str, purl: str)`.
 - Produces: `load_components(path: Path) -> list[Component]`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 import json
@@ -57,18 +57,18 @@ def test_load_components_deduplicates_purls():
     assert [component.purl for component in components] == ["pkg:pypi/django@3.2.0"]
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python3 -m unittest tests.security_automation.test_sbom -v`
 
 Expected: FAIL because `security_automation` does not exist.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Implement `Component` as a frozen dataclass and `load_components()` with recursive
 CycloneDX component traversal, package-URL validation, and stable deduplication.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python3 -m unittest tests.security_automation.test_sbom -v`
 
@@ -88,7 +88,7 @@ Expected: PASS.
 - Produces: `fetch_osv_vulnerability(vuln_id, opener=...) -> dict`.
 - Produces: `build_findings(components, osv_matches, details_by_id, kev, cwe_to_rule) -> list[Finding]`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_build_findings_marks_kev_and_extracts_fixed_versions():
@@ -115,19 +115,19 @@ def test_build_findings_marks_kev_and_extracts_fixed_versions():
     assert findings[0].rule_family == "SQLI"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python3 -m unittest tests.security_automation.test_matcher -v`
 
 Expected: FAIL because feed and matcher interfaces do not exist.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Implement URL requests with `urllib.request`, bounded retries, OSV batch chunks of
 1000, KEV indexing by CVE, severity extraction, CWE-to-rule mapping, fixed-version
 extraction, and stable risk sorting.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `python3 -m unittest tests.security_automation.test_matcher -v`
 
@@ -146,7 +146,7 @@ Expected: PASS.
 - Produces: `render_issue(scan) -> str`.
 - Produces: `python -m security_automation.cli scan --sbom PATH --output-dir PATH`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_render_report_prioritizes_known_exploited_findings():
@@ -156,18 +156,18 @@ def test_render_report_prioritizes_known_exploited_findings():
     assert "Known exploited" in report
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python3 -m unittest tests.security_automation.test_report -v`
 
 Expected: FAIL because report functions do not exist.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Generate a summary table, severity counts, KEV count, top findings, rule-family
 coverage gaps, and remediation next steps. The rolling issue body must stay concise.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `python3 -m unittest tests.security_automation.test_report -v`
 
@@ -184,7 +184,7 @@ Expected: PASS.
 - Produces: `<output>/moat-waf-rules-<version>.tar.gz`.
 - Produces: `<output>/moat-waf-rules-<version>.tar.gz.sha256`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_rule_pack_is_deterministic():
@@ -193,18 +193,18 @@ def test_rule_pack_is_deterministic():
     assert sha256(first.archive) == sha256(second.archive)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python3 -m unittest tests.security_automation.test_rule_pack -v`
 
 Expected: FAIL because the builder does not exist.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Sort rule files, create a manifest with file digests, normalize tar metadata, write
 gzip with `mtime=0`, and emit a SHA-256 sidecar.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `python3 -m unittest tests.security_automation.test_rule_pack -v`
 
@@ -222,29 +222,29 @@ Expected: PASS.
 - Modify: `README.md`
 - Modify: `.gitignore`
 
-- [ ] **Step 1: Add scheduled intelligence workflow**
+- [x] **Step 1: Add scheduled intelligence workflow**
 
 Build `moat-waf:security-scan`, generate a CycloneDX SBOM with Trivy, run Python
 automation tests, run the scanner, upload artifacts, and create/comment on a rolling
 `[security-intel] Vulnerability backlog` issue.
 
-- [ ] **Step 2: Add rule-pack release workflow**
+- [x] **Step 2: Add rule-pack release workflow**
 
 On `v*` tags, run tests, build the deterministic rule pack, sign it with Sigstore
 keyless signing, and attach the archive, checksum, signature, and certificate to the
 GitHub release.
 
-- [ ] **Step 3: Add dependency automation**
+- [x] **Step 3: Add dependency automation**
 
 Configure weekly Dependabot updates for Docker and GitHub Actions. Auto-merge only
 patch and minor updates after required checks pass.
 
-- [ ] **Step 4: Document operation and rollback**
+- [x] **Step 4: Document operation and rollback**
 
 Document manual scan commands, optional `NVD_API_KEY`, issue workflow, rule-pack
 verification, artifact retention, and rollback to the previous signed pack.
 
-- [ ] **Step 5: Verify workflow syntax**
+- [x] **Step 5: Verify workflow syntax**
 
 Run a Ruby YAML parse over `.github/workflows/*.yml` and
 `.github/dependabot.yml`.
@@ -253,25 +253,25 @@ Expected: every file parses without error.
 
 ### Task 6: Full verification
 
-- [ ] **Step 1: Run Python tests**
+- [x] **Step 1: Run Python tests**
 
 Run: `python3 -m unittest discover -s tests/security_automation -v`
 
 Expected: 0 failures.
 
-- [ ] **Step 2: Run existing Lua regression tests**
+- [x] **Step 2: Run existing Lua regression tests**
 
 Run the OpenResty Docker command used by `.github/workflows/docker-publish.yml`.
 
 Expected: all existing Lua unit checks pass.
 
-- [ ] **Step 3: Run an offline end-to-end scan**
+- [x] **Step 3: Run an offline end-to-end scan**
 
 Use test fixtures to generate `vulnerabilities.json`, `report.md`, and `issue.md`.
 
 Expected: all outputs exist and contain deterministic finding counts.
 
-- [ ] **Step 4: Inspect the final diff**
+- [x] **Step 4: Inspect the final diff**
 
 Run: `git diff --check` and `git status --short`.
 
