@@ -1,6 +1,8 @@
 logs/
 *.pid
 *.secret
+*.pyc
+__pycache__/
 .env
 .DS_Store
 .mcp.json
