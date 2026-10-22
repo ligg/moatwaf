@@ -1,0 +1,13 @@
+{
+  "CWE-20": "PROTO",
+  "CWE-22": "PATH",
+  "CWE-77": "CMDI",
+  "CWE-78": "CMDI",
+  "CWE-79": "XSS",
+  "CWE-89": "SQLI",
+  "CWE-94": "PROTO",
+  "CWE-502": "PROTO",
+  "CWE-611": "PROTO",
+  "CWE-918": "SSRF"
+}
+

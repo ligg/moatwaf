@@ -27,6 +27,12 @@ Moat WAF 是一款基于 OpenResty (nginx + Lua) 的 Web 应用防火墙，为 W
 - **多语言支持** — 简体中文 / 繁体中文 / English，自动检测浏览器语言
 - **零外部依赖** — 无数据库、无外部服务，单容器运行，资源占用极低
 
+### 安全自动化
+
+仓库内置定时漏洞情报、SBOM 匹配、Dependabot 依赖升级和签名规则包发布流程。
+WAF 运行时仍保持零外部依赖。配置和手工执行方式见
+[`security/README.md`](security/README.md)。
+
 ---
 
 ## 快速部署

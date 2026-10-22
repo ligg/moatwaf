@@ -2,7 +2,12 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from security_automation.cli import build_scan, enrich_scan_with_nvd, write_scan_outputs
+from security_automation.cli import (
+    build_scan,
+    enrich_scan_with_nvd,
+    load_cwe_rule_map,
+    write_scan_outputs,
+)
 from security_automation.models import Component, KeVEntry
 
 
@@ -94,6 +99,15 @@ class CliTests(unittest.TestCase):
             self.assertTrue((output / "vulnerabilities.json").exists())
             self.assertTrue((output / "report.md").exists())
             self.assertTrue((output / "issue.md").exists())
+
+    def test_load_cwe_rule_map_normalizes_keys(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "map.json"
+            path.write_text('{"cwe-89": "SQLI"}', encoding="utf-8")
+
+            mapping = load_cwe_rule_map(path)
+
+        self.assertEqual(mapping, {"CWE-89": "SQLI"})
 
 
 if __name__ == "__main__":

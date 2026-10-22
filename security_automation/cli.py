@@ -31,10 +31,22 @@ DEFAULT_CWE_TO_RULE = {
     "CWE-611": "PROTO",
     "CWE-918": "SSRF",
 }
+DEFAULT_CWE_RULE_MAP_PATH = Path("security/cwe-rule-map.json")
 
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def load_cwe_rule_map(path: Path) -> dict[str, str]:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError(f"{path} must contain a JSON object")
+    mapping: dict[str, str] = {}
+    for cwe, family in raw.items():
+        if isinstance(cwe, str) and isinstance(family, str):
+            mapping[cwe.upper()] = family
+    return mapping
 
 
 def _summary(findings: list[dict[str, Any]]) -> dict[str, int]:
@@ -184,12 +196,16 @@ def run_scan(
         errors.append(
             f"OSV detail lookup capped at {max_details} of {len(vuln_ids)} findings"
         )
+    cwe_to_rule = DEFAULT_CWE_TO_RULE
+    if DEFAULT_CWE_RULE_MAP_PATH.exists():
+        cwe_to_rule = load_cwe_rule_map(DEFAULT_CWE_RULE_MAP_PATH)
     scan = build_scan(
         components=components,
         kev=kev,
         osv_matches=osv_matches,
         details_by_id=details_by_id,
         errors=errors,
+        cwe_to_rule=cwe_to_rule,
     )
     if nvd_api_key:
         scan["nvdEnriched"] = True

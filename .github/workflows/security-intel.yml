@@ -1,0 +1,139 @@
+name: security-intel
+
+on:
+  schedule:
+    - cron: "30 18 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "security_automation/**"
+      - "tests/security_automation/**"
+      - "scripts/build_rule_pack.py"
+      - ".github/workflows/security-intel.yml"
+  push:
+    branches:
+      - master
+    paths:
+      - "security_automation/**"
+      - "tests/security_automation/**"
+      - "scripts/build_rule_pack.py"
+      - ".github/workflows/security-intel.yml"
+
+concurrency:
+  group: security-intel
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+  security-events: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run security automation tests
+        run: python3 -m unittest discover -s tests/security_automation -v
+
+      - name: Run existing Lua regression checks
+        run: |
+          docker run --rm -v "$PWD":/workspace -w /workspace \
+            -e LUA_CPATH="/usr/local/openresty/lualib/?.so;;" \
+            openresty/openresty:1.25.3.2-0-alpine sh -lc '
+            set -e
+            for f in $(find lib -name "*.lua"); do
+              /usr/local/openresty/luajit/bin/luajit -e "local s=io.open(\"$f\"):read(\"*a\"); local fn,e=loadstring(s); if not fn then print(\"SYNTAX ERROR $f: \"..e); os.exit(1) end"
+            done
+            /usr/local/openresty/luajit/bin/luajit tests/unit/test_trend.lua
+            /usr/local/openresty/luajit/bin/luajit tests/unit/test_cc_protect.lua
+            /usr/local/openresty/luajit/bin/luajit tests/unit/test_ip_control.lua
+            /usr/local/openresty/luajit/bin/luajit tests/unit/test_upload_check_http1.lua
+            /usr/local/openresty/luajit/bin/luajit tests/unit/test_upload_check_http2.lua
+            /usr/local/openresty/luajit/bin/luajit tests/unit/test_challenge_cors.lua
+            /usr/local/openresty/luajit/bin/luajit tests/unit/test_waf_challenge_verify.lua
+            /usr/local/openresty/luajit/bin/luajit tests/unit/test_waf_cors_errors.lua
+          '
+
+  scan:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build WAF image
+        run: docker build -t moat-waf:security-scan .
+
+      - name: Generate CycloneDX SBOM
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          image-ref: moat-waf:security-scan
+          format: cyclonedx
+          output: security-artifacts/sbom.cdx.json
+          scanners: vuln
+          ignore-unfixed: false
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+
+      - name: Generate Trivy SARIF
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          image-ref: moat-waf:security-scan
+          format: sarif
+          output: security-artifacts/trivy-results.sarif
+          scanners: vuln
+          ignore-unfixed: false
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+
+      - name: Upload code scanning results
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
+        with:
+          sarif_file: security-artifacts/trivy-results.sarif
+
+      - name: Match SBOM against OSV and CISA KEV
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          python3 -m security_automation.cli scan \
+            --sbom security-artifacts/sbom.cdx.json \
+            --output-dir security-artifacts/intel
+
+      - name: Upload security intelligence artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-intel-${{ github.run_id }}
+          path: security-artifacts/
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Create or update rolling security issue
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          issue_number="$(gh issue list \
+            --state open \
+            --search '"[security-intel] Vulnerability backlog" in:title' \
+            --json number \
+            --jq '.[0].number // ""')"
+          if [ -n "$issue_number" ]; then
+            gh issue comment "$issue_number" --body-file security-artifacts/intel/issue.md
+          else
+            gh issue create \
+              --title "[security-intel] Vulnerability backlog" \
+              --body-file security-artifacts/intel/issue.md
+          fi
+

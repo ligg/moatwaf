@@ -1,0 +1,82 @@
+name: rule-pack-release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run security automation tests
+        run: python3 -m unittest discover -s tests/security_automation -v
+
+      - name: Run existing Lua regression checks
+        run: |
+          docker run --rm -v "$PWD":/workspace -w /workspace \
+            -e LUA_CPATH="/usr/local/openresty/lualib/?.so;;" \
+            openresty/openresty:1.25.3.2-0-alpine sh -lc '
+            set -e
+            for f in $(find lib -name "*.lua"); do
+              /usr/local/openresty/luajit/bin/luajit -e "local s=io.open(\"$f\"):read(\"*a\"); local fn,e=loadstring(s); if not fn then print(\"SYNTAX ERROR $f: \"..e); os.exit(1) end"
+            done
+            /usr/local/openresty/luajit/bin/luajit tests/unit/test_trend.lua
+            /usr/local/openresty/luajit/bin/luajit tests/unit/test_cc_protect.lua
+            /usr/local/openresty/luajit/bin/luajit tests/unit/test_ip_control.lua
+            /usr/local/openresty/luajit/bin/luajit tests/unit/test_upload_check_http1.lua
+            /usr/local/openresty/luajit/bin/luajit tests/unit/test_upload_check_http2.lua
+            /usr/local/openresty/luajit/bin/luajit tests/unit/test_challenge_cors.lua
+            /usr/local/openresty/luajit/bin/luajit tests/unit/test_waf_challenge_verify.lua
+            /usr/local/openresty/luajit/bin/luajit tests/unit/test_waf_cors_errors.lua
+          '
+
+      - name: Build deterministic rule pack
+        run: |
+          python3 scripts/build_rule_pack.py \
+            --rules-dir rules \
+            --output-dir dist \
+            --version "$GITHUB_REF_NAME"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v4.1.2
+
+      - name: Sign rule pack with Sigstore
+        run: |
+          archive="$(find dist -name '*.tar.gz' -print -quit)"
+          cosign sign-blob --yes \
+            --output-signature "${archive}.sig" \
+            --output-certificate "${archive}.pem" \
+            "$archive"
+
+      - name: Publish GitHub release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* \
+              --title "$GITHUB_REF_NAME" \
+              --notes "Moat WAF rule pack for $GITHUB_REF_NAME"
+          fi
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: moat-waf-rules-${{ github.ref_name }}
+          path: dist/
+          retention-days: 90
+
