@@ -1,4 +1,4 @@
-FROM openresty/openresty:1.31.1.1-4-alpine
+FROM openresty/openresty:1.31.1.1-5-alpine
 
 LABEL maintainer="moat-waf"
 LABEL description="Moat WAF - nginx-based Web Application Firewall"
