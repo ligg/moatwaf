@@ -92,7 +92,7 @@ def build_rule_pack(rules_dir: Path, output_dir: Path, version: str) -> RulePack
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build a deterministic Moat WAF rule pack")
-    parser.add_argument("--rules-dir", type=Path, default=Path("rules"))
+    parser.add_argument("--rules-dir", type=Path, default=Path("conf/rules"))
     parser.add_argument("--output-dir", type=Path, default=Path("dist"))
     parser.add_argument("--version", required=True)
     return parser

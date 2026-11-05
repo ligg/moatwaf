@@ -1,0 +1,37 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python test dependencies
+        run: python3 -m pip install -r tests/requirements.txt
+
+      - name: Run Python tests
+        run: ./tests/run_python_tests.sh
+
+      - name: Build OpenResty test image
+        run: docker build -f tests/Dockerfile -t moat-waf-tests .
+
+      - name: Run Lua tests
+        run: |
+          docker run --rm -v "$PWD":/workspace -w /workspace \
+            moat-waf-tests

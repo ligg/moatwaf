@@ -21,32 +21,24 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Run security automation tests
-        run: python3 -m unittest discover -s tests/security_automation -v
+      - name: Install Python test dependencies
+        run: python3 -m pip install -r tests/requirements.txt
 
-      - name: Run existing Lua regression checks
+      - name: Run Python tests
+        run: ./tests/run_python_tests.sh
+
+      - name: Build test image
+        run: docker build -f tests/Dockerfile -t moat-waf-tests .
+
+      - name: Run Lua regression checks
         run: |
           docker run --rm -v "$PWD":/workspace -w /workspace \
-            -e LUA_CPATH="/usr/local/openresty/lualib/?.so;;" \
-            openresty/openresty:1.25.3.2-0-alpine sh -lc '
-            set -e
-            for f in $(find lib -name "*.lua"); do
-              /usr/local/openresty/luajit/bin/luajit -e "local s=io.open(\"$f\"):read(\"*a\"); local fn,e=loadstring(s); if not fn then print(\"SYNTAX ERROR $f: \"..e); os.exit(1) end"
-            done
-            /usr/local/openresty/luajit/bin/luajit tests/unit/test_trend.lua
-            /usr/local/openresty/luajit/bin/luajit tests/unit/test_cc_protect.lua
-            /usr/local/openresty/luajit/bin/luajit tests/unit/test_ip_control.lua
-            /usr/local/openresty/luajit/bin/luajit tests/unit/test_upload_check_http1.lua
-            /usr/local/openresty/luajit/bin/luajit tests/unit/test_upload_check_http2.lua
-            /usr/local/openresty/luajit/bin/luajit tests/unit/test_challenge_cors.lua
-            /usr/local/openresty/luajit/bin/luajit tests/unit/test_waf_challenge_verify.lua
-            /usr/local/openresty/luajit/bin/luajit tests/unit/test_waf_cors_errors.lua
-          '
+            moat-waf-tests
 
       - name: Build deterministic rule pack
         run: |
           python3 scripts/build_rule_pack.py \
-            --rules-dir rules \
+            --rules-dir conf/rules \
             --output-dir dist \
             --version "$GITHUB_REF_NAME"
 

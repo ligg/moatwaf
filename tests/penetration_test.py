@@ -13,8 +13,8 @@ from datetime import datetime
 from urllib.parse import quote
 
 # 配置
-BASE_URL = "http://localhost:8013"
-TOKEN = "apk_f7e7a5a316f4d59d7b4d567ce72f12d8a622c7694e4418a1"
+BASE_URL = os.getenv("PENTEST_BASE_URL", "http://localhost:8013").rstrip("/")
+TOKEN = os.getenv("PENTEST_ADMIN_TOKEN", "").strip()
 REPORT_FILE = os.path.join(os.path.dirname(__file__), "penetration_report.md")
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "pentest_results")
 TIMEOUT = 10
@@ -576,7 +576,7 @@ def generate_report():
 | 测试目标 | {BASE_URL} |
 | 测试时间 | {now} |
 | 测试工具 | Python requests |
-| 认证Token | `{TOKEN[:20]}...` |
+| 认证Token | `已从 PENTEST_ADMIN_TOKEN 环境变量配置（已脱敏）` |
 | 测试用例总数 | {stats['total']} |
 
 ## 测试结果概览
@@ -711,7 +711,31 @@ def generate_report():
     print(f" 报告已生成: {REPORT_FILE}")
     print(f"{'='*60}")
 
+def validate_config():
+    if not TOKEN:
+        print(
+            "ERROR: PENTEST_ADMIN_TOKEN is required. "
+            "Export a valid admin token before running the penetration test.",
+            file=sys.stderr,
+        )
+        return False
+    if len(TOKEN) < 32:
+        print(
+            "ERROR: PENTEST_ADMIN_TOKEN must be at least 32 characters.",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
 def main():
+    config_check = "--check-config" in sys.argv[1:]
+    if not validate_config():
+        return 2
+    if config_check:
+        print("configuration OK")
+        return 0
+
     print("Moat WAF - 渗透测试")
     print(f"目标: {BASE_URL}")
     print(f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -760,6 +784,7 @@ def main():
     print(f" 拦截率: {stats['blocked']/max(stats['total'],1)*100:.1f}%")
 
     generate_report()
+    return 0
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -15,9 +15,10 @@ RUN mkdir -p /opt/moat/conf/rules \
 COPY conf/nginx.conf /opt/moat/conf/nginx.conf
 COPY conf/mime.types /opt/moat/conf/mime.types
 
-# Copy WAF rule files
+# The runtime rule corpus is the only source of truth. Keep a separate
+# read-only baseline for the admin "restore defaults" operation.
 COPY conf/rules/ /opt/moat/conf/rules/
-COPY rules/ /opt/moat/rules/
+COPY conf/rules/ /opt/moat/rules/
 
 # Copy IP control lists
 COPY conf/ip_blacklist.txt /opt/moat/conf/ip_blacklist.txt
@@ -38,8 +39,13 @@ RUN sed -i 's|lua_package_path "lib/?.lua;;";|lua_package_path "/opt/moat/?.lua;
 # Initialize rules version file
 RUN date +%s > /opt/moat/conf/rules/.version
 
-# Make conf and logs writable by nginx worker (nobody)
-RUN chmod -R 777 /opt/moat/conf /opt/moat/logs
+# The nginx master stays root to bind port 80 and replace config placeholders.
+# Workers run as nobody and only receive write access to runtime-owned paths.
+RUN chown -R nobody:nobody /opt/moat/conf /opt/moat/logs \
+    && chmod -R u=rwX,go= /opt/moat/conf /opt/moat/logs \
+    && find /opt/moat/conf /opt/moat/logs -type f -exec chmod u=rw,go= {} \; \
+    && chown -R root:root /opt/moat/rules \
+    && chmod -R a=rX /opt/moat/rules
 
 # Copy and configure entrypoint
 COPY docker-entrypoint.sh /docker-entrypoint.sh

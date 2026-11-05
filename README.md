@@ -6,6 +6,8 @@
 
 **轻量级、现代化、自托管 Web 应用防火墙**
 
+[![tests](https://github.com/ligg/moatwaf/actions/workflows/tests.yml/badge.svg)](https://github.com/ligg/moatwaf/actions/workflows/tests.yml)
+
 [English](README_EN.md) | 中文
 
 </div>
@@ -43,7 +45,7 @@ WAF 运行时仍保持零外部依赖。配置和手工执行方式见
 docker run -d --name moat-waf \
   -p 8080:80 \
   -e WAF_BACKEND=your-backend-ip:80 \
-  -e WAF_ADMIN_TOKEN=your-secure-token-min-32-chars \
+  -e WAF_ADMIN_TOKEN=replace-with-at-least-32-random-characters \
   angelababa/moat-waf:latest
 ```
 
@@ -123,14 +125,40 @@ add_header Content-Security-Policy "default-src 'self'" always;
 ### Docker 构建
 
 ```bash
-git clone https://github.com/ligg/moatwaf.git
+git clone https://github.com/ligg/moatwaf.git moat-waf
 cd moat-waf
 docker build -t angelababa/moat-waf:latest .
 docker run -d --name moat-waf \
   -p 8080:80 \
   -e WAF_BACKEND=192.168.1.100:80 \
-  -e WAF_ADMIN_TOKEN=your-secure-token-here \
+  -e WAF_ADMIN_TOKEN=replace-with-at-least-32-random-characters \
   angelababa/moat-waf:latest
+```
+
+---
+
+## 开发与测试
+
+完整 Lua 测试固定使用与生产镜像一致的 OpenResty 版本：
+
+```bash
+docker build -f tests/Dockerfile -t moat-waf-tests .
+docker run --rm -v "$PWD":/workspace -w /workspace moat-waf-tests
+```
+
+Python 测试可直接运行：
+
+```bash
+python3 -m pip install -r tests/requirements.txt
+./tests/run_python_tests.sh
+```
+
+渗透测试的管理 Token 只从环境变量读取：
+
+```bash
+PENTEST_ADMIN_TOKEN='<at-least-32-characters>' \
+PENTEST_BASE_URL='http://localhost:8013' \
+python3 tests/penetration_test.py
 ```
 
 ---
