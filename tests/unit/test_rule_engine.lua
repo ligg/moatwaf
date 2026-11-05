@@ -33,6 +33,7 @@ if not ngx then
     ngx.log = function(level, ...) end  -- silent in tests
     ngx.ERR = 4
     ngx.now = function() return os.time() end
+    ngx.worker = { pid = function() return 1234 end }
 end
 
 ---------------------------------------------------------------------------
@@ -41,12 +42,27 @@ end
 
 -- Process YAML escape sequences in double-quoted strings (mirrors lib/rule_engine.lua)
 local function yaml_unescape(str)
-    str = str:gsub("\\\\", "\0")     -- temporarily replace \\ with placeholder
-    str = str:gsub('\\"', '"')       -- \" -> "
-    str = str:gsub("\\n", "\n")      -- \n -> newline
-    str = str:gsub("\\t", "\t")      -- \t -> tab
-    str = str:gsub("\0", "\\")       -- restore \\ as single backslash
-    return str
+    local result = {}
+    local i = 1
+    while i <= #str do
+        if i + 1 <= #str and str:byte(i) == 92 and str:byte(i + 1) == 92 then
+            table.insert(result, "\\")
+            i = i + 2
+        elseif i + 1 <= #str and str:byte(i) == 92 and str:byte(i + 1) == 34 then
+            table.insert(result, '"')
+            i = i + 2
+        elseif i + 1 <= #str and str:byte(i) == 92 and str:byte(i + 1) == 110 then
+            table.insert(result, "\n")
+            i = i + 2
+        elseif i + 1 <= #str and str:byte(i) == 92 and str:byte(i + 1) == 116 then
+            table.insert(result, "\t")
+            i = i + 2
+        else
+            table.insert(result, str:sub(i, i))
+            i = i + 1
+        end
+    end
+    return table.concat(result)
 end
 
 local function assert_eq(actual, expected, msg)
@@ -250,12 +266,12 @@ end)
 ---------------------------------------------------------------------------
 -- Test 2: Rule loading from YAML files
 ---------------------------------------------------------------------------
-test_pass("Rule loading - loads rules from rules/ directory", function()
+test_pass("Rule loading - loads rules from conf/rules/ directory", function()
     -- Clear any cached rules
     package.loaded["lib.rule_engine"] = nil
     local re = require("lib.rule_engine")
     local rules = re.load_rules()
-    assert_true(#rules > 0, "should load at least some rules from rules/ directory")
+    assert_true(#rules > 0, "should load at least some rules from conf/rules/ directory")
     print("    (loaded " .. #rules .. " rules)")
 end)
 
@@ -290,7 +306,7 @@ test_pass("Rule loading - valid actions only", function()
     package.loaded["lib.rule_engine"] = nil
     local re = require("lib.rule_engine")
     local rules = re.load_rules()
-    local valid_actions = { block = true, log = true, pass = true }
+    local valid_actions = { BLOCK = true, LOG = true, pass = true }
     for _, rule in ipairs(rules) do
         assert_true(valid_actions[rule.action],
             "rule " .. rule.id .. " has invalid action: " .. tostring(rule.action))
@@ -321,16 +337,16 @@ test_pass("Pattern matching - SQL injection UNION SELECT in URI", function()
     package.loaded["lib.rule_engine"] = nil
     local re = require("lib.rule_engine")
 
-    -- Find the SQLI_001 rule
+    -- Find the SQLI-002 rule (URI-targeted UNION SELECT)
     local rules = re.load_rules()
     local sqli_rule = nil
     for _, rule in ipairs(rules) do
-        if rule.id == "SQLI_001" then
+        if rule.id == "SQLI-002" then
             sqli_rule = rule
             break
         end
     end
-    assert_true(sqli_rule ~= nil, "SQLI_001 rule should exist")
+    assert_true(sqli_rule ~= nil, "SQLI-002 rule should exist")
 
     -- Should match
     assert_true(re.match_rule(sqli_rule, { URI = "/path? UNION SELECT * FROM users" }),
@@ -354,12 +370,12 @@ test_pass("Pattern matching - XSS script tag in ARGS", function()
     local rules = re.load_rules()
     local xss_rule = nil
     for _, rule in ipairs(rules) do
-        if rule.id == "XSS_001" then
+        if rule.id == "XSS-001" then
             xss_rule = rule
             break
         end
     end
-    assert_true(xss_rule ~= nil, "XSS_001 rule should exist")
+    assert_true(xss_rule ~= nil, "XSS-001 rule should exist")
 
     assert_true(re.match_rule(xss_rule, { ARGS = "q=<script>alert(1)</script>" }),
         "should match <script> tag")
@@ -377,17 +393,20 @@ test_pass("Pattern matching - Path traversal dot-dot-slash", function()
 
     local rules = re.load_rules()
     local path_rule = nil
+    local windows_path_rule = nil
     for _, rule in ipairs(rules) do
-        if rule.id == "PATH_001" then
+        if rule.id == "PTRV-001" then
             path_rule = rule
-            break
+        elseif rule.id == "PTRV-006" then
+            windows_path_rule = rule
         end
     end
-    assert_true(path_rule ~= nil, "PATH_001 rule should exist")
+    assert_true(path_rule ~= nil, "PTRV-001 rule should exist")
+    assert_true(windows_path_rule ~= nil, "PTRV-006 rule should exist")
 
     assert_true(re.match_rule(path_rule, { URI = "/files/../../../etc/passwd" }),
         "should match ../ traversal")
-    assert_true(re.match_rule(path_rule, { URI = "/files/..\\..\\..\\windows" }),
+    assert_true(re.match_rule(windows_path_rule, { URI = "/files/..\\..\\..\\windows" }),
         "should match ..\\ traversal (Windows)")
     assert_false(re.match_rule(path_rule, { URI = "/files/test.txt" }),
         "should not match normal file path")
@@ -400,12 +419,12 @@ test_pass("Pattern matching - Command injection pipe", function()
     local rules = re.load_rules()
     local cmd_rule = nil
     for _, rule in ipairs(rules) do
-        if rule.id == "CMD_001" then
+        if rule.id == "CMDI-001" then
             cmd_rule = rule
             break
         end
     end
-    assert_true(cmd_rule ~= nil, "CMD_001 rule should exist")
+    assert_true(cmd_rule ~= nil, "CMDI-001 rule should exist")
 
     assert_true(re.match_rule(cmd_rule, { ARGS = "input=|cat /etc/passwd" }),
         "should match pipe |")
@@ -422,12 +441,12 @@ test_pass("Pattern matching - Scanner detection in User-Agent", function()
     local rules = re.load_rules()
     local scan_rule = nil
     for _, rule in ipairs(rules) do
-        if rule.id == "SCAN_001" then
+        if rule.id == "SCAN-002" then
             scan_rule = rule
             break
         end
     end
-    assert_true(scan_rule ~= nil, "SCAN_001 rule should exist")
+    assert_true(scan_rule ~= nil, "SCAN-002 rule should exist")
 
     assert_true(re.match_rule(scan_rule, { HEADERS = { ["User-Agent"] = "Nikto/2.1" } }),
         "should match Nikto User-Agent")
@@ -444,12 +463,12 @@ test_pass("Pattern matching - sensitive file .git", function()
     local rules = re.load_rules()
     local git_rule = nil
     for _, rule in ipairs(rules) do
-        if rule.id == "SENS_001" then
+        if rule.id == "SENS-002" then
             git_rule = rule
             break
         end
     end
-    assert_true(git_rule ~= nil, "SENS_001 rule should exist")
+    assert_true(git_rule ~= nil, "SENS-002 rule should exist")
 
     assert_true(re.match_rule(git_rule, { URI = "/.git/config" }),
         "should match .git/config")
@@ -485,12 +504,12 @@ test_pass("Pattern matching - normalize catches encoded attacks", function()
     local rules = re.load_rules()
     local sqli_rule = nil
     for _, rule in ipairs(rules) do
-        if rule.id == "SQLI_001" then
+        if rule.id == "SQLI-002" then
             sqli_rule = rule
             break
         end
     end
-    assert_true(sqli_rule ~= nil, "SQLI_001 rule should exist")
+    assert_true(sqli_rule ~= nil, "SQLI-002 rule should exist")
 
     -- URL-encoded UNION SELECT
     assert_true(re.match_rule(sqli_rule, { URI = "/path?%20UNION%20SELECT%201" }),
@@ -513,7 +532,7 @@ test_pass("Evaluate - returns first matching rule", function()
     }
 
     local action, rule_id, severity, desc = re.evaluate(request)
-    assert_eq(action, "block", "should block on SQL injection")
+    assert_eq(action, "BLOCK", "should block on SQL injection")
     assert_true(rule_id ~= nil, "should return a rule_id")
     assert_true(severity ~= nil, "should return severity")
     assert_true(desc ~= nil, "should return description")
@@ -551,7 +570,7 @@ test_pass("Evaluate - XSS detection in ARGS", function()
     }
 
     local action, rule_id, severity, desc = re.evaluate(request)
-    assert_eq(action, "block", "should block XSS")
+    assert_eq(action, "BLOCK", "should block XSS")
     assert_true(rule_id ~= nil, "should match a rule")
     print("    (matched rule: " .. rule_id .. ")")
 end)
@@ -569,7 +588,7 @@ test_pass("Evaluate - path traversal detection", function()
     }
 
     local action, rule_id, severity, desc = re.evaluate(request)
-    assert_eq(action, "block", "should block path traversal")
+    assert_eq(action, "BLOCK", "should block path traversal")
     assert_true(rule_id ~= nil, "should match a rule")
     print("    (matched rule: " .. rule_id .. ")")
 end)
@@ -587,7 +606,7 @@ test_pass("Evaluate - scanner detection in User-Agent", function()
     }
 
     local action, rule_id, severity, desc = re.evaluate(request)
-    assert_eq(action, "block", "should block scanner")
+    assert_eq(action, "BLOCK", "should block scanner")
     assert_true(rule_id ~= nil, "should match a rule")
     print("    (matched rule: " .. rule_id .. ")")
 end)
@@ -605,7 +624,7 @@ test_pass("Evaluate - cookie injection detection", function()
     }
 
     local action, rule_id, severity, desc = re.evaluate(request)
-    assert_eq(action, "block", "should block XSS in cookie")
+    assert_eq(action, "BLOCK", "should block XSS in cookie")
     assert_true(rule_id ~= nil, "should match a rule")
     print("    (matched rule: " .. rule_id .. ")")
 end)
@@ -622,10 +641,10 @@ test_pass("Priority - rules loaded in file order", function()
     local first_sqli_idx = nil
     local first_xss_idx = nil
     for i, rule in ipairs(rules) do
-        if rule.id:match("^SQLI_") and not first_sqli_idx then
+        if rule.id:match("^SQLI%-") and not first_sqli_idx then
             first_sqli_idx = i
         end
-        if rule.id:match("^XSS_") and not first_xss_idx then
+        if rule.id:match("^XSS%-") and not first_xss_idx then
             first_xss_idx = i
         end
     end
@@ -650,8 +669,8 @@ test_pass("Priority - first match wins", function()
     }
 
     local action, rule_id, severity, desc = re.evaluate(request)
-    assert_eq(action, "block", "should block")
-    assert_true(rule_id:match("^SQLI_"), "first match should be SQL injection, got: " .. rule_id)
+    assert_eq(action, "BLOCK", "should block")
+    assert_true(rule_id:match("^SQLI%-"), "first match should be SQL injection, got: " .. rule_id)
 end)
 
 ---------------------------------------------------------------------------
@@ -677,24 +696,27 @@ end)
 ---------------------------------------------------------------------------
 -- Test 7: Custom rules
 ---------------------------------------------------------------------------
-test_pass("Custom rules - loaded from custom.yaml", function()
+test_pass("Custom rules - empty baseline loads without error", function()
     package.loaded["lib.rule_engine"] = nil
     local re = require("lib.rule_engine")
-    local rules = re.load_rules()
-
-    local has_custom = false
-    for _, rule in ipairs(rules) do
-        if rule.id:match("^CUSTOM_") then
-            has_custom = true
-            break
-        end
-    end
-    assert_true(has_custom, "should load custom rules")
+    local rules, err = re.get_rules_from_file("custom.yaml")
+    assert_true(rules ~= nil, "custom.yaml should load: " .. tostring(err))
+    assert_eq(#rules, 0, "default custom.yaml should be empty")
 end)
 
-test_pass("Custom rules - match /api/internal/ path", function()
+test_pass("Custom rules - add, match, and delete", function()
     package.loaded["lib.rule_engine"] = nil
     local re = require("lib.rule_engine")
+
+    local ok, err = re.add_rule_to_custom({
+        id = "CUSTOM-999",
+        description = "Block internal API for test",
+        severity = "high",
+        target = "URI",
+        pattern = "^/api/internal/",
+        action = "BLOCK",
+    })
+    assert_true(ok, "custom rule should be added: " .. tostring(err))
 
     local request = {
         URI = "/api/internal/secret",
@@ -705,9 +727,12 @@ test_pass("Custom rules - match /api/internal/ path", function()
     }
 
     local action, rule_id, severity, desc = re.evaluate(request)
-    assert_eq(action, "block", "should block /api/internal/ access")
-    assert_true(rule_id ~= nil, "should match a rule")
+    assert_eq(action, "BLOCK", "should block /api/internal/ access")
+    assert_eq(rule_id, "CUSTOM-999", "should match the custom rule")
     print("    (matched rule: " .. rule_id .. ")")
+
+    local deleted, delete_err = re.delete_rule_from_custom("CUSTOM-999")
+    assert_true(deleted, "custom test rule should be deleted: " .. tostring(delete_err))
 end)
 
 ---------------------------------------------------------------------------
@@ -765,23 +790,23 @@ end)
 ---------------------------------------------------------------------------
 -- Test 10: Word boundary patterns
 ---------------------------------------------------------------------------
-test_pass("Word boundary - SQLI_003 matches OR/AND boolean", function()
+test_pass("Word boundary - SQLI-004 matches OR/AND boolean", function()
     package.loaded["lib.rule_engine"] = nil
     local re = require("lib.rule_engine")
     local rules = re.load_rules()
 
-    local sqli_003 = nil
+    local sqli_rule = nil
     for _, rule in ipairs(rules) do
-        if rule.id == "SQLI_003" then
-            sqli_003 = rule
+        if rule.id == "SQLI-004" then
+            sqli_rule = rule
             break
         end
     end
-    assert_true(sqli_003 ~= nil, "SQLI_003 rule should exist")
+    assert_true(sqli_rule ~= nil, "SQLI-004 rule should exist")
 
-    assert_true(re.match_rule(sqli_003, { ARGS = "id=1' or 1=1--" }),
+    assert_true(re.match_rule(sqli_rule, { ARGS = "id=1' or 1=1--" }),
         "should match 'or 1=1'")
-    assert_true(re.match_rule(sqli_003, { ARGS = "id=1 and 1=1" }),
+    assert_true(re.match_rule(sqli_rule, { ARGS = "id=1 and 1=1" }),
         "should match 'and 1=1'")
 end)
 
@@ -801,7 +826,7 @@ test_pass("Null byte detection in URI", function()
     }
 
     local action, rule_id, severity, desc = re.evaluate(request)
-    assert_eq(action, "block", "should block null byte in URI")
+    assert_eq(action, "BLOCK", "should block null byte in URI")
     assert_true(rule_id ~= nil, "should match a rule")
     print("    (matched rule: " .. rule_id .. ")")
 end)
@@ -816,14 +841,14 @@ test_pass("Multiple targets - BODY content detection", function()
     local request = {
         URI = "/api/data",
         ARGS = "",
-        BODY = '{"query": "SELECT * FROM users"}',
+        BODY = '{"query": "UNION SELECT password FROM users"}',
         HEADERS = { ["User-Agent"] = "Mozilla/5.0", ["Content-Type"] = "application/json" },
         COOKIE = "",
     }
 
     local action, rule_id, severity, desc = re.evaluate(request)
-    assert_eq(action, "block", "should block SQL injection in body")
-    assert_true(rule_id ~= nil, "should match a rule")
+    assert_eq(action, "BLOCK", "should block SQL injection in body")
+    assert_eq(rule_id, "SQLI-003", "should match the body SQL injection rule")
     print("    (matched rule: " .. rule_id .. ")")
 end)
 

@@ -272,6 +272,22 @@ local function make_mock_dict()
         return true
     end
 
+    function mock:ttl(key)
+        if store[key] == nil then
+            return nil, "not found"
+        end
+        if not ttls[key] then
+            return 0
+        end
+        local remaining = ttls[key] - os.time()
+        if remaining <= 0 then
+            store[key] = nil
+            ttls[key] = nil
+            return nil, "expired"
+        end
+        return remaining
+    end
+
     function mock:get_keys(max_count)
         max_count = max_count or 1000
         local keys = {}
@@ -439,8 +455,13 @@ local function setup_ngx()
         end,
     }
 
-    -- Force reload admin module so it picks up new mocks
-    package.loaded["lib.admin"] = nil
+    -- Force reload the router and every sub-module so each test picks up
+    -- the newly-created ngx mock instead of capturing a previous one.
+    for name in pairs(package.loaded) do
+        if name == "lib.admin" or name:match("^lib%.admin%.") then
+            package.loaded[name] = nil
+        end
+    end
 end
 
 ---------------------------------------------------------------------------
@@ -564,7 +585,7 @@ local function test_auth_no_token()
     assert(get_status() == 401, "Should return 401 without token")
     local resp = get_response()
     assert(resp.error == true, "Should return error")
-    assert(resp.message == "Missing Authorization header", "Should indicate missing auth")
+    assert(resp.message == "Unauthorized", "Should not reveal whether auth was missing or invalid")
 end
 
 -- Test 6: Auth fails with wrong token
@@ -580,7 +601,7 @@ local function test_auth_wrong_token()
     assert(get_status() == 401, "Should return 401 with wrong token")
     local resp = get_response()
     assert(resp.error == true, "Should return error")
-    assert(resp.message == "Invalid token", "Should indicate invalid token")
+    assert(resp.message == "Unauthorized", "Should not reveal whether auth was missing or invalid")
 end
 
 -- Test 7: Auth succeeds with correct token
@@ -724,8 +745,9 @@ local function test_blacklist_get()
     assert(get_status() == 200, "Should return 200")
     local resp = get_response()
     assert(resp.entries ~= nil, "Should have entries table")
-    assert(resp.entries["1.2.3.4"] == "reason1", "Should contain 1.2.3.4")
-    assert(resp.entries["5.6.7.8"] == "reason2", "Should contain 5.6.7.8")
+    assert(resp.entries["1.2.3.4"].value == "reason1", "Should contain 1.2.3.4")
+    assert(resp.entries["5.6.7.8"].value == "reason2", "Should contain 5.6.7.8")
+    assert(resp.entries["1.2.3.4"].ttl > 0, "Should report remaining TTL")
 end
 
 -- Test 15: POST /admin/ip/whitelist with valid IP
@@ -913,7 +935,7 @@ local function test_auth_bad_format()
 
     assert(get_status() == 401, "Should return 401 for non-Bearer auth")
     local resp = get_response()
-    assert(resp.message == "Invalid Authorization format", "Should indicate invalid format")
+    assert(resp.message == "Unauthorized", "Should not reveal the Authorization format")
 end
 
 -- Test 26: POST /admin/rules/reload calls rule_engine.reload_rules
@@ -989,21 +1011,23 @@ local function test_blacklist_default_ttl()
     run_admin()
 
     local resp = get_response()
-    assert(resp.ttl == 300, "Default TTL should be 300, got " .. tostring(resp.ttl))
+    assert(resp.ttl == 0, "Default TTL should be permanent, got " .. tostring(resp.ttl))
 end
 
 -- Test 30: Auth with no admin token configured
 local function test_auth_no_configured_token()
     setup_ngx()
 
-    ngx.var.waf_admin_token = ""
+    mock_waf_state:set("admin_token_valid", false)
     ngx.var.http_authorization = "Bearer some-token"
     ngx.var.uri = "/admin/status"
     ngx.req.get_method = function() return "GET" end
 
     run_admin()
 
-    assert(get_status() == 403, "Should return 403 when admin token not configured")
+    assert(get_status() == 503, "Should return 503 when admin token not configured")
+    local resp = get_response()
+    assert(resp.message == "Admin API disabled: token not configured", "Should explain disabled admin API")
 end
 
 ---------------------------------------------------------------------------

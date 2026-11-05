@@ -6,6 +6,8 @@
 
 **A lightweight, modern, self-hosted Web Application Firewall**
 
+[![tests](https://github.com/ligg/moatwaf/actions/workflows/tests.yml/badge.svg)](https://github.com/ligg/moatwaf/actions/workflows/tests.yml)
+
 English | [中文](README.md)
 
 </div>
@@ -37,7 +39,7 @@ Moat WAF is a Web Application Firewall built on OpenResty (nginx + Lua), providi
 docker run -d --name moat-waf \
   -p 8080:80 \
   -e WAF_BACKEND=your-backend-ip:80 \
-  -e WAF_ADMIN_TOKEN=your-secure-token-min-32-chars \
+  -e WAF_ADMIN_TOKEN=replace-with-at-least-32-random-characters \
   angelababa/moat-waf:latest
 ```
 
@@ -123,14 +125,40 @@ add_header Content-Security-Policy "default-src 'self'" always;
 ### Build from Source
 
 ```bash
-git clone https://github.com/ligg/moatwaf.git
+git clone https://github.com/ligg/moatwaf.git moat-waf
 cd moat-waf
 docker build -t angelababa/moat-waf:latest .
 docker run -d --name moat-waf \
   -p 8080:80 \
   -e WAF_BACKEND=192.168.1.100:80 \
-  -e WAF_ADMIN_TOKEN=your-secure-token-here \
+  -e WAF_ADMIN_TOKEN=replace-with-at-least-32-random-characters \
   angelababa/moat-waf:latest
+```
+
+---
+
+## Development and Tests
+
+The full Lua suite uses the same OpenResty version as the production image:
+
+```bash
+docker build -f tests/Dockerfile -t moat-waf-tests .
+docker run --rm -v "$PWD":/workspace -w /workspace moat-waf-tests
+```
+
+Python tests can run directly:
+
+```bash
+python3 -m pip install -r tests/requirements.txt
+./tests/run_python_tests.sh
+```
+
+The penetration test reads its admin token from the environment only:
+
+```bash
+PENTEST_ADMIN_TOKEN='<at-least-32-characters>' \
+PENTEST_BASE_URL='http://localhost:8013' \
+python3 tests/penetration_test.py
 ```
 
 ---

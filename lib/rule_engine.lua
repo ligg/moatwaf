@@ -739,7 +739,7 @@ function _M.delete_rule_from_custom(rule_id)
     return true
 end
 
--- Restore custom.yaml from default baseline (rules/ directory).
+-- Restore custom.yaml from the read-only image baseline copy.
 -- Backs up current file to custom.yaml.bak first.
 -- Returns true on success, or nil + error message on failure.
 function _M.restore_default()

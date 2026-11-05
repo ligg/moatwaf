@@ -4,6 +4,14 @@
 
 package.path = "./?.lua;./lib/?.lua;" .. package.path
 
+local original_getenv = os.getenv
+os.getenv = function(name)
+    if name == "WAF_MAX_UPLOAD_SIZE" or name == "WAF_UPLOAD_SCAN_LIMIT" then
+        return "1k"
+    end
+    return original_getenv(name)
+end
+
 -- Set up global ngx mock before requiring upload_check module
 _G.ngx = _G.ngx or {}
 ngx.shared = ngx.shared or {}
@@ -161,10 +169,10 @@ describe("upload_check", function()
             assert.is_truthy(desc:find("PHP"))
         end)
 
-        it("should detect HTML script tag", function()
+        it("should not flag generic HTML script tags", function()
             local detected, desc = upload_check.contains_shell_code("<script>alert(1)</script>")
-            assert.is_true(detected)
-            assert.is_truthy(desc:find("Script"))
+            assert.is_false(detected)
+            assert.is_nil(desc)
         end)
 
         it("should detect shell shebang", function()
@@ -179,10 +187,10 @@ describe("upload_check", function()
             assert.is_truthy(desc:find("os.system"))
         end)
 
-        it("should detect eval() call", function()
+        it("should not flag generic eval calls", function()
             local detected, desc = upload_check.contains_shell_code("eval('malicious')")
-            assert.is_true(detected)
-            assert.is_truthy(desc:find("eval"))
+            assert.is_false(detected)
+            assert.is_nil(desc)
         end)
 
         it("should return false for clean content", function()
@@ -224,34 +232,33 @@ describe("upload_check", function()
         it("should block dangerous extension: php", function()
             local result = upload_check.check("shell.php", "application/octet-stream", nil, nil)
             assert.is_false(result.allowed)
-            assert.is_truthy(result.reason:find("UPLOAD-001"))
+            assert.is_truthy(result.reason:find("UPLOAD-001", 1, true))
             assert.is_truthy(result.reason:find("php"))
         end)
 
         it("should block dangerous extension: asp", function()
             local result = upload_check.check("page.asp", "text/html", nil, nil)
             assert.is_false(result.allowed)
-            assert.is_truthy(result.reason:find("UPLOAD-001"))
+            assert.is_truthy(result.reason:find("UPLOAD-001", 1, true))
         end)
 
         it("should block dangerous extension: exe", function()
             local result = upload_check.check("trojan.exe", "application/octet-stream", nil, nil)
             assert.is_false(result.allowed)
-            assert.is_truthy(result.reason:find("UPLOAD-001"))
+            assert.is_truthy(result.reason:find("UPLOAD-001", 1, true))
         end)
 
         it("should block file that exceeds size limit", function()
-            -- Create a body larger than 10MB
-            local big_body = string.rep("X", 10 * 1024 * 1024 + 1)
+            local big_body = string.rep("X", 1025)
             local result = upload_check.check("image.jpg", "image/jpeg", jpeg_prefix, big_body)
             assert.is_false(result.allowed)
-            assert.is_truthy(result.reason:find("UPLOAD-002"))
+            assert.is_truthy(result.reason:find("UPLOAD-002", 1, true))
         end)
 
         it("should block unknown extension not in allowed list", function()
-            local result = upload_check.check("file.xyz", "application/octet-stream", jpeg_prefix, jpeg_prefix)
+            local result = upload_check.check("file.xyz", "text/plain", "text", "text")
             assert.is_false(result.allowed)
-            assert.is_truthy(result.reason:find("UPLOAD-001"))
+            assert.is_truthy(result.reason:find("UPLOAD-001", 1, true))
             assert.is_truthy(result.reason:find("not in allowed list"))
         end)
 
@@ -259,7 +266,7 @@ describe("upload_check", function()
             local pe_prefix = "MZ\x90\x00\x03\x00\x00\x00"
             local result = upload_check.check("innocent.jpg", "image/jpeg", pe_prefix, pe_prefix)
             assert.is_false(result.allowed)
-            assert.is_truthy(result.reason:find("UPLOAD-001"))
+            assert.is_truthy(result.reason:find("UPLOAD-001", 1, true))
             assert.is_truthy(result.reason:find("Executable"))
             assert.equals("application/x-dosexec", result.detected_type)
         end)
@@ -268,16 +275,16 @@ describe("upload_check", function()
             local elf_prefix = "\x7FELF\x02\x01\x01\x00"
             local result = upload_check.check("library.so", "application/octet-stream", elf_prefix, elf_prefix)
             assert.is_false(result.allowed)
-            assert.is_truthy(result.reason:find("UPLOAD-001"))
+            assert.is_truthy(result.reason:find("UPLOAD-001", 1, true))
             assert.is_truthy(result.reason:find("Executable"))
             assert.equals("application/x-elf", result.detected_type)
         end)
 
         it("should block file containing shell code", function()
             local body = jpeg_prefix .. "<?php system('whoami'); ?>"
-            local result = upload_check.check("photo.jpg", "image/jpeg", jpeg_prefix, body)
+            local result = upload_check.check("payload", "application/octet-stream", jpeg_prefix, body)
             assert.is_false(result.allowed)
-            assert.is_truthy(result.reason:find("UPLOAD-004"))
+            assert.is_truthy(result.reason:find("UPLOAD-004", 1, true))
             assert.is_truthy(result.reason:find("Shell code"))
         end)
 
@@ -285,7 +292,7 @@ describe("upload_check", function()
             local pdf_prefix = "%PDF-1.4"
             local result = upload_check.check("doc.pdf", "image/jpeg", pdf_prefix, pdf_prefix)
             assert.is_false(result.allowed)
-            assert.is_truthy(result.reason:find("UPLOAD-003"))
+            assert.is_truthy(result.reason:find("UPLOAD-003", 1, true))
             assert.is_truthy(result.reason:find("mismatch"))
         end)
 

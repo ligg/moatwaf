@@ -7,7 +7,7 @@
 | 测试目标 | http://localhost:8013 |
 | 测试时间 | 2026-06-11 07:47:19 |
 | 测试工具 | Python requests |
-| 认证Token | `apk_f7e7a5a316f4d59d...` |
+| 认证Token | `已从 PENTEST_ADMIN_TOKEN 环境变量配置（已脱敏）` |
 | 测试用例总数 | 163 |
 
 ## 测试结果概览

@@ -55,7 +55,7 @@ python3 -m security_automation.cli scan \
 
 ```bash
 python3 scripts/build_rule_pack.py \
-  --rules-dir rules \
+  --rules-dir conf/rules \
   --output-dir dist \
   --version v1.0.0
 ```

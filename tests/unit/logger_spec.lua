@@ -49,6 +49,11 @@ local function make_mock_dict()
         return true
     end
 
+    function dict:reset()
+        for key in pairs(data) do data[key] = nil end
+        for key in pairs(ttls) do ttls[key] = nil end
+    end
+
     -- Expose internal data for test assertions
     dict._data = data
     dict._ttls = ttls
@@ -83,8 +88,7 @@ describe("logger", function()
     before_each(function()
         -- Reset stats dict before each test
         local stats_dict = ngx.shared.waf_stats
-        stats_dict._data = {}
-        stats_dict._ttls = {}
+        stats_dict:reset()
         -- Re-point the mock dict reference
         ngx.shared.waf_stats = stats_dict
 
@@ -208,7 +212,7 @@ describe("logger", function()
             assert.is_not_nil(json_part)
             -- Should contain the fields we passed
             assert.is_truthy(json_part:find("192.168.1.100"))
-            assert.is_truthy(json_part:find("SQLI-001"))
+            assert.is_truthy(json_part:find("SQLI-001", 1, true))
         end)
 
         it("attack log should contain WAF_ATTACK tag", function()
